@@ -1,0 +1,9 @@
+.env
+outputs
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
