@@ -4,7 +4,7 @@ from .base import BaseLoggerHandler
 
 
 class WandBLoggerHandler(BaseLoggerHandler):
-    """WandB 日志处理器。"""
+    """Weights & Biases adapter."""
 
     def log_figure(
         self,
@@ -15,10 +15,7 @@ class WandBLoggerHandler(BaseLoggerHandler):
     ) -> None:
         import wandb
 
-        payload = {
-            file_path: wandb.Image(figure, caption=caption)
-        }
-
+        payload = {file_path: wandb.Image(figure, caption=caption)}
         if step is not None:
             self.logger.experiment.log(payload, step=step)
         else:

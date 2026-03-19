@@ -4,4 +4,6 @@ data_cfg:
   dataset_name: dummy_dataset
   batch_size: 32
   num_workers: 2
-  fold: 0
+  total_samples: 120
+  val_ratio: 0.2
+  test_ratio: 0.1

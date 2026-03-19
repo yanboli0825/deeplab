@@ -1,59 +1,49 @@
-import numpy as np
-import pytorch_lightning as pl
-from lightning.pytorch.callbacks import ModelCheckpoint
 import os
-from typing import Any
+
+import numpy as np
 from omegaconf import DictConfig
-from src.core.build import (
-    build_model,
-    build_datamodule,
-    build_logger,
-    build_callbacks,
-    build_trainer,
-)
-from src.utils.utils import log_hyperparameters
+
+from src.core.contracts import CvSummary
+from src.core.runner import run_experiment
+from src.utils.misc import save_json
 
 
 def cv_loop(cfg: DictConfig) -> float:
-    val_scores = []
+    n_splits = int(cfg.mode.get("n_folds", 5))
+    results = []
 
-    # =================================================================================
-    # 交叉验证
-    # =================================================================================
-    n_splits = cfg.mode.get('n_folds', 5)
     for fold in range(n_splits):
-        fold_cfg = cfg.copy()
+        result = run_experiment(cfg, fold=fold)
+        results.append(result)
 
-        # 构建组件
-        model = build_model(fold_cfg.model)
-        datamodule = build_datamodule(fold_cfg.datamodule, fold)
+    scores = [item.summary.val_score for item in results]
+    valid_scores = [score for score in scores if not np.isnan(score)]
+    if not valid_scores:
+        return float("nan")
 
-        logger_cfg = fold_cfg.logger.copy()
-        if logger_cfg._target_.endswith('MLFlowLogger'):
-            run_name = logger_cfg.get('run_name', '')
-            logger_cfg.run_name = f"{run_name}_fold{fold}" if run_name else f"fold{fold}"
-        elif logger_cfg._target_.endswith('WandbLogger'):
-            name = logger_cfg.get('name', '')
-            logger_cfg.name = f"{name}_fold{fold}" if name else f"fold{fold}"
-
-        logger = build_logger(logger_cfg)
-
-        # 构建 callbacks，并修改 ModelCheckpoint 的路径
-        callbacks = build_callbacks(fold_cfg.callbacks)
-        for cb in callbacks:
-            if isinstance(cb, ModelCheckpoint):
-                cb.dirpath = os.path.join(fold_cfg.paths.output_dir, f"fold_{fold}_checkpoints")
-                os.makedirs(cb.dirpath, exist_ok=True)
-
-        trainer = build_trainer(cfg.trainer, logger, callbacks)
-
-        log_hyperparameters(fold_cfg, model, trainer)
-
-        trainer.fit(model, datamodule)
-
-        monitor = cfg.get("monitor", "val/loss")
-        score = trainer.callback_metrics.get(monitor)
-
-        val_scores.append(score)
-
-    return float(np.mean(val_scores))
+    test_scores = [
+        item.summary.test_score
+        for item in results
+        if item.summary.test_score is not None and not np.isnan(item.summary.test_score)
+    ]
+    summary = CvSummary(
+        mode="cv",
+        experiment_name=str(cfg.get("experiment_name", "default")),
+        run_name=str(cfg.get("run_name", "default")),
+        output_dir=str(cfg.paths.output_dir),
+        resolved_config_path=(
+            str(getattr(cfg.runtime, "resolved_config_path", ""))
+            if cfg.get("runtime")
+            else os.path.join(str(cfg.paths.output_dir), "config.yaml")
+        ),
+        summary_path=os.path.join(str(cfg.paths.output_dir), "run_summary.json"),
+        monitor=str(cfg.get("monitor", "val/loss")),
+        val_score=float(np.mean(valid_scores)),
+        test_score=float(np.mean(test_scores)) if test_scores else None,
+        n_folds=n_splits,
+        fold_summary_paths=[item.context.summary_path for item in results],
+        fold_scores=scores,
+        fold_test_scores=[item.summary.test_score for item in results],
+    )
+    save_json(summary.to_dict(), summary.summary_path)
+    return summary.val_score

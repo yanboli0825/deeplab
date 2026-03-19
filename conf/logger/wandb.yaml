@@ -1,7 +1,7 @@
 _target_: lightning.pytorch.loggers.WandbLogger
 project: ${project_name}
-name: ${experiment_name}
+name: ${run_name}
 save_dir: ${paths.output_dir}
 offline: False
-log_model: False   # 是否将ckpt传到云端，False可节省云端空间
+log_model: False
 group: "11111"

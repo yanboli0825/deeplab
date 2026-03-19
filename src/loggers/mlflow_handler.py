@@ -6,7 +6,7 @@ from .base import BaseLoggerHandler
 
 
 class MLFlowLoggerHandler(BaseLoggerHandler):
-    """MLFlow 日志处理器。"""
+    """MLflow adapter."""
 
     def log_figure(
         self,
