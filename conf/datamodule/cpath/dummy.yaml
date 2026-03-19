@@ -1,0 +1,7 @@
+_target_: src.datamodules.dummy_dm.DummyDataModule
+
+data_cfg:
+  dataset_name: dummy_dataset
+  batch_size: 32
+  num_workers: 2
+  fold: 0

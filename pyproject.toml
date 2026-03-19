@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deeplab"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "hydra-core",
+    "lightning",
+    "omegaconf",
+    "torch",
+    "torchmetrics",
+    "pyyaml>=6.0",
+    "python-dotenv",
+    "mlflow",
+    "optuna",
+    "matplotlib",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "pytest-mock",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+    "pre-commit",
+]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "W", "N"]
+unfixable = ["F401"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_configs = true

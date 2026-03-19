@@ -1,0 +1,8 @@
+_target_: lightning.pytorch.Trainer
+accelerator: "gpu"
+devices: [0]          # 使用哪几张卡，[0,1] 就是多卡 DDP
+max_epochs: 10
+precision: "16-mixed" # 自动混合精度，加速利器
+enable_progress_bar: True
+log_every_n_steps: 1
+default_root_dir: ${paths.output_dir}
