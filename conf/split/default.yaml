@@ -1,0 +1,10 @@
+method: null
+num_samples: null
+n_splits: 5
+val_ratio: 0.2
+test_ratio: 0.2
+seed: ${seed}
+fold: null
+candidate_indices: null
+group_ids: null
+manifest_path: null

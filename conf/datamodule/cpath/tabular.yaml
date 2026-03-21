@@ -1,0 +1,12 @@
+_target_: src.datamodules.tabular_dm.TabularClassificationDataModule
+
+init_args:
+  data_cfg:
+    dataset_name: tabular_dataset
+    data_file: data/example.csv
+    feature_columns: [f0, f1, f2, f3]
+    label_column: label
+    batch_size: 32
+    num_workers: 0
+    val_ratio: 0.2
+    test_ratio: 0.1

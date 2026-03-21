@@ -1,6 +1,9 @@
 defaults:
   - _self_
   - mode: train
+  - artifacts: default
+  - split: default
+  - workflow: default
   - datamodule: cpath/dummy
   - model: cpath/dummy
   - callbacks: default
@@ -10,16 +13,11 @@ defaults:
   - hydra: default
   - hpo: null
 
-
-# 顶层全局变量
 project_name: deeplab
 experiment_name: null
 run_name: null
 
-seed: 42 # seed for random number generators in pytorch, numpy and python.random
-
-monitor: val/loss  # for checkpoint callback use
-test_after_train: False
+seed: 42
+monitor: val/loss
+test_after_train: false
 resume_ckpt: null
-
-

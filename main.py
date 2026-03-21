@@ -14,15 +14,23 @@ def main(cfg: DictConfig) -> float:
     The Python runtime intentionally exposes only two first-class modes:
     `train` for a single execution unit and `cv` for repeated train units.
     More complex workflows should be assembled outside this file.
+
+    Args:
+        cfg: Hydra composed configuration for the current invocation.
+
+    Returns:
+        float: The primary score returned by the selected mode implementation.
+
+    Raises:
+        ValueError: Raised when `cfg.mode.name` is not one of the built-in modes.
     """
 
     cfg = validate_app_config(cfg)
     bootstrap = bootstrap_app(cfg)
-    with open_dict(cfg):
-        cfg.runtime = {
-            "output_dir": bootstrap.output_dir,
-            "resolved_config_path": bootstrap.resolved_config_path,
-        }
+    with open_dict(cfg.runtime):
+        cfg.runtime.output_dir = bootstrap.output_dir
+        cfg.runtime.resolved_config_path = bootstrap.resolved_config_path
+        cfg.runtime.artifact_index_path = bootstrap.artifact_index_path
 
     # mode dispatch
     if cfg.mode.name == "train":

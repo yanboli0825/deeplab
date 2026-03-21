@@ -15,6 +15,18 @@ class MLFlowLoggerHandler(BaseLoggerHandler):
         caption: str = "",
         step: Optional[int] = None,
     ) -> None:
+        """Log a figure to MLflow, falling back to artifact upload when needed.
+
+        Args:
+            figure: Matplotlib figure to log.
+            file_path: Artifact-relative path inside MLflow.
+            caption: Unused caption placeholder kept for interface compatibility.
+            step: Unused step placeholder kept for interface compatibility.
+
+        Returns:
+            None: The function logs the figure through MLflow side effects.
+        """
+
         client = self.logger.experiment
         run_id = self.logger.run_id
 

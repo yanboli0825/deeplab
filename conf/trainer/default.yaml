@@ -1,8 +1,11 @@
-_target_: lightning.pytorch.Trainer
-accelerator: "gpu"
-devices: [0]          # Use [0, 1] or similar for multi-GPU execution.
-max_epochs: 10
-precision: "16-mixed" # Mixed precision is the default training mode.
-enable_progress_bar: True
-log_every_n_steps: 1
-default_root_dir: ${paths.output_dir}
+_target_: lightning.pytorch.trainer.Trainer
+_recursive_: true
+
+init_args:
+  accelerator: gpu
+  devices: [0]
+  max_epochs: 3
+  enable_progress_bar: true
+  log_every_n_steps: 10
+  num_sanity_val_steps: 0
+  default_root_dir: ${paths.output_dir}

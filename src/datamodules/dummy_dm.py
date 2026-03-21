@@ -1,11 +1,10 @@
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-import lightning as L
 import numpy as np
 import torch
-import yaml
 from torch.utils.data import DataLoader, Dataset
 
+from src.datamodules.base import BaseDataModule
 from src.datamodules.split import SplitIndices
 
 
@@ -13,12 +12,36 @@ class DummyDataset(Dataset):
     """Deterministic toy dataset keyed by sample ids."""
 
     def __init__(self, sample_ids: Sequence[int]) -> None:
+        """Store sample identifiers used to generate deterministic dummy data.
+
+        Args:
+            sample_ids: Sample identifiers that seed random feature generation.
+
+        Returns:
+            None: The constructor stores dataset indices.
+        """
+
         self.sample_ids = list(sample_ids)
 
     def __len__(self) -> int:
+        """Return the number of samples in the dataset.
+
+        Returns:
+            int: Dataset size.
+        """
+
         return len(self.sample_ids)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Generate one deterministic dummy sample from its sample id.
+
+        Args:
+            idx: Position of the sample in the local dataset view.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: Feature tensor and integer label tensor.
+        """
+
         sample_id = int(self.sample_ids[idx])
         generator = torch.Generator().manual_seed(sample_id)
         bag = torch.randn(10, 512, generator=generator)
@@ -26,8 +49,8 @@ class DummyDataset(Dataset):
         return bag, label
 
 
-class DummyDataModule(L.LightningDataModule):
-    """Template datamodule that consumes split artifacts instead of owning split policy."""
+class DummyDataModule(BaseDataModule):
+    """Reference datamodule that consumes split artifacts and emits data metadata."""
 
     def __init__(
         self,
@@ -36,36 +59,48 @@ class DummyDataModule(L.LightningDataModule):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        super().__init__()
-        self.save_hyperparameters()
+        """Initialize the reference datamodule.
+
+        Args:
+            data_cfg: Datamodule configuration such as batch size and sample counts.
+            split_indices: Optional externally supplied split indices.
+            *args: Extra positional arguments kept for compatibility.
+            **kwargs: Extra keyword arguments kept for compatibility.
+
+        Returns:
+            None: The constructor initializes dataset holders.
+        """
+
+        super().__init__(data_cfg=data_cfg, split_indices=split_indices, *args, **kwargs)
         self.train_dataset: Optional[DummyDataset] = None
         self.val_dataset: Optional[DummyDataset] = None
         self.test_dataset: Optional[DummyDataset] = None
 
     def setup(self, stage: Optional[str] = None) -> None:
-        split = self.hparams.split_indices or self._load_split_manifest()
-        if split is None:
-            split = self._default_split()
+        """Build train/val/test datasets from the resolved split.
+
+        Args:
+            stage: Optional Lightning stage, unused by this reference implementation.
+
+        Returns:
+            None: The function populates dataset attributes and emits artifacts.
+        """
+
+        split = self.resolve_split()
+        self._active_split = split
 
         self.train_dataset = DummyDataset(split.train.tolist())
         self.val_dataset = DummyDataset(split.val.tolist())
         self.test_dataset = DummyDataset(split.test.tolist())
-
-    def _load_split_manifest(self) -> Optional[SplitIndices]:
-        split_file = self.hparams.data_cfg.get("split_file")
-        if not split_file:
-            return None
-
-        with open(split_file, "r", encoding="utf-8") as f:
-            payload = yaml.safe_load(f) or {}
-
-        return SplitIndices(
-            train=np.asarray(payload.get("train", []), dtype=int),
-            val=np.asarray(payload.get("val", []), dtype=int),
-            test=np.asarray(payload.get("test", []), dtype=int),
-        )
+        self.emit_data_artifacts()
 
     def _default_split(self) -> SplitIndices:
+        """Create a simple deterministic split from sample count ratios.
+
+        Returns:
+            SplitIndices: Default train/val/test split for the dummy dataset.
+        """
+
         total_samples = int(self.hparams.data_cfg.get("total_samples", 120))
         val_ratio = float(self.hparams.data_cfg.get("val_ratio", 0.2))
         test_ratio = float(self.hparams.data_cfg.get("test_ratio", 0.1))
@@ -80,7 +115,31 @@ class DummyDataModule(L.LightningDataModule):
 
         return SplitIndices(train=train_idx, val=val_idx, test=test_idx)
 
+    def input_shape(self) -> tuple[int, ...]:
+        """Describe one dummy sample before batching.
+
+        Returns:
+            tuple[int, ...]: Dummy bag shape `(instances, feature_dim)`.
+        """
+
+        return (10, 512)
+
+    def label_space(self) -> Dict[str, Any]:
+        """Describe the label space for the dummy task.
+
+        Returns:
+            Dict[str, Any]: Task type and number of classes.
+        """
+
+        return {"task": "binary", "num_classes": 2}
+
     def train_dataloader(self) -> DataLoader:
+        """Build the training dataloader.
+
+        Returns:
+            DataLoader: Training dataloader for the dummy dataset.
+        """
+
         if self.train_dataset is None:
             self.setup()
         return DataLoader(
@@ -91,6 +150,12 @@ class DummyDataModule(L.LightningDataModule):
         )
 
     def val_dataloader(self) -> DataLoader:
+        """Build the validation dataloader.
+
+        Returns:
+            DataLoader: Validation dataloader for the dummy dataset.
+        """
+
         if self.val_dataset is None:
             self.setup()
         return DataLoader(
@@ -101,6 +166,12 @@ class DummyDataModule(L.LightningDataModule):
         )
 
     def test_dataloader(self) -> DataLoader:
+        """Build the test dataloader.
+
+        Returns:
+            DataLoader: Test dataloader for the dummy dataset.
+        """
+
         if self.test_dataset is None:
             self.setup()
         return DataLoader(

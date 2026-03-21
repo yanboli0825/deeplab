@@ -8,7 +8,7 @@ indices are consumed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 import numpy as np
 
@@ -21,9 +21,156 @@ class SplitIndices:
     val: np.ndarray
     test: np.ndarray
 
+    @classmethod
+    def from_mapping(cls, payload: Dict[str, Any]) -> "SplitIndices":
+        """Create a split container from a plain mapping.
+
+        Args:
+            payload: Mapping with optional `train`, `val`, and `test` index lists.
+
+        Returns:
+            SplitIndices: Parsed split container with numpy arrays.
+        """
+
+        return cls(
+            train=np.asarray(payload.get("train", []), dtype=int),
+            val=np.asarray(payload.get("val", []), dtype=int),
+            test=np.asarray(payload.get("test", []), dtype=int),
+        )
+
+    def to_dict(self) -> Dict[str, list[int]]:
+        """Convert split indices to plain Python lists.
+
+        Returns:
+            Dict[str, list[int]]: Serializable split mapping.
+        """
+
+        return {
+            "train": self.train.astype(int).tolist(),
+            "val": self.val.astype(int).tolist(),
+            "test": self.test.astype(int).tolist(),
+        }
+
+
+class SplitProvider:
+    """Base interface for framework-level split providers."""
+
+    def build(self) -> SplitIndices:
+        """Build split indices for a concrete dataset view.
+
+        Returns:
+            SplitIndices: Generated train/validation/test indices.
+        """
+
+        raise NotImplementedError
+
+
+@dataclass
+class HoldoutSplitProvider(SplitProvider):
+    num_samples: int
+    val_ratio: float = 0.2
+    seed: int = 42
+    candidate_indices: Optional[Sequence[int]] = None
+
+    def build(self) -> SplitIndices:
+        """Create holdout split indices from provider settings.
+
+        Returns:
+            SplitIndices: Generated holdout split.
+        """
+
+        return make_holdout_split(
+            num_samples=self.num_samples,
+            val_ratio=self.val_ratio,
+            seed=self.seed,
+            candidate_indices=self.candidate_indices,
+        )
+
+
+@dataclass
+class KFoldSplitProvider(SplitProvider):
+    num_samples: int
+    n_splits: int
+    fold: int
+    seed: int = 42
+    candidate_indices: Optional[Sequence[int]] = None
+
+    def build(self) -> SplitIndices:
+        """Create K-fold split indices from provider settings.
+
+        Returns:
+            SplitIndices: Generated K-fold split for the configured fold.
+        """
+
+        return make_kfold_split(
+            num_samples=self.num_samples,
+            n_splits=self.n_splits,
+            fold=self.fold,
+            seed=self.seed,
+            candidate_indices=self.candidate_indices,
+        )
+
+
+@dataclass
+class GroupHoldoutSplitProvider(SplitProvider):
+    num_samples: int
+    group_ids: Sequence[int]
+    val_ratio: float = 0.2
+    seed: int = 42
+    candidate_indices: Optional[Sequence[int]] = None
+
+    def build(self) -> SplitIndices:
+        """Create group-aware holdout split indices from provider settings.
+
+        Returns:
+            SplitIndices: Generated group-aware holdout split.
+        """
+
+        return make_group_holdout_split(
+            num_samples=self.num_samples,
+            group_ids=self.group_ids,
+            val_ratio=self.val_ratio,
+            seed=self.seed,
+            candidate_indices=self.candidate_indices,
+        )
+
+
+@dataclass
+class GroupKFoldSplitProvider(SplitProvider):
+    num_samples: int
+    group_ids: Sequence[int]
+    n_splits: int
+    fold: int
+    seed: int = 42
+    candidate_indices: Optional[Sequence[int]] = None
+
+    def build(self) -> SplitIndices:
+        """Create group-aware K-fold split indices from provider settings.
+
+        Returns:
+            SplitIndices: Generated group-aware K-fold split for the configured fold.
+        """
+
+        return make_group_kfold_split(
+            num_samples=self.num_samples,
+            group_ids=self.group_ids,
+            n_splits=self.n_splits,
+            fold=self.fold,
+            seed=self.seed,
+            candidate_indices=self.candidate_indices,
+        )
+
 
 def _as_index_array(values: Optional[Sequence[int]], num_samples: int) -> np.ndarray:
-    """Return candidate sample indices as a 1-D integer array."""
+    """Return candidate sample indices as a 1-D integer array.
+
+    Args:
+        values: Optional explicit candidate indices.
+        num_samples: Total sample count used when `values` is omitted.
+
+    Returns:
+        np.ndarray: One-dimensional integer index array.
+    """
 
     if num_samples < 0:
         raise ValueError("num_samples must be non-negative")
@@ -33,7 +180,15 @@ def _as_index_array(values: Optional[Sequence[int]], num_samples: int) -> np.nda
 
 
 def _as_group_array(group_ids: Sequence[int], num_samples: int) -> np.ndarray:
-    """Return group ids as a numpy array and validate the length."""
+    """Return group ids as a numpy array and validate the length.
+
+    Args:
+        group_ids: Group identifier for each sample.
+        num_samples: Expected number of samples.
+
+    Returns:
+        np.ndarray: Group id array aligned with sample indices.
+    """
 
     groups = np.asarray(group_ids)
     if len(groups) != num_samples:
@@ -42,15 +197,41 @@ def _as_group_array(group_ids: Sequence[int], num_samples: int) -> np.ndarray:
 
 
 def _empty_indices() -> np.ndarray:
+    """Return an empty integer index array.
+
+    Returns:
+        np.ndarray: Empty integer array used for missing partitions.
+    """
+
     return np.array([], dtype=int)
 
 
 def _validate_ratio(name: str, value: float) -> None:
+    """Validate that a split ratio lies in the open interval `(0, 1)`.
+
+    Args:
+        name: Human-readable ratio name for error messages.
+        value: Ratio value to validate.
+
+    Returns:
+        None: The function raises on invalid values.
+    """
+
     if not 0.0 < value < 1.0:
         raise ValueError(f"{name} must be in the open interval (0, 1)")
 
 
 def _validate_kfold_args(n_splits: int, fold: int) -> None:
+    """Validate common K-fold arguments.
+
+    Args:
+        n_splits: Number of folds.
+        fold: Fold index requested by the caller.
+
+    Returns:
+        None: The function raises on invalid values.
+    """
+
     if n_splits < 2:
         raise ValueError("n_splits must be >= 2")
     if not 0 <= fold < n_splits:
@@ -63,7 +244,17 @@ def make_holdout_split(
     seed: int = 42,
     candidate_indices: Optional[Sequence[int]] = None,
 ) -> SplitIndices:
-    """Create a random train/val holdout split."""
+    """Create a random train/validation holdout split.
+
+    Args:
+        num_samples: Total sample count.
+        val_ratio: Fraction of candidate samples assigned to validation.
+        seed: Random seed used for shuffling.
+        candidate_indices: Optional subset of samples that may participate in the split.
+
+    Returns:
+        SplitIndices: Holdout split with `train` and `val` populated.
+    """
 
     _validate_ratio("val_ratio", val_ratio)
     indices = _as_index_array(candidate_indices, num_samples).copy()
@@ -90,7 +281,18 @@ def make_group_holdout_split(
     seed: int = 42,
     candidate_indices: Optional[Sequence[int]] = None,
 ) -> SplitIndices:
-    """Create a group-aware train/val holdout split."""
+    """Create a group-aware train/validation holdout split.
+
+    Args:
+        num_samples: Total sample count.
+        group_ids: Group identifier for each sample.
+        val_ratio: Target validation ratio measured in samples.
+        seed: Random seed used for shuffling groups.
+        candidate_indices: Optional subset of samples that may participate in the split.
+
+    Returns:
+        SplitIndices: Group-aware holdout split with `train` and `val` populated.
+    """
 
     _validate_ratio("val_ratio", val_ratio)
     indices = _as_index_array(candidate_indices, num_samples)
@@ -127,7 +329,17 @@ def _balanced_group_bins(
     n_bins: int,
     seed: int,
 ) -> list[np.ndarray]:
-    """Assign full groups to balanced bins using a greedy heuristic."""
+    """Assign full groups to balanced bins using a greedy heuristic.
+
+    Args:
+        candidate_indices: Sample indices eligible for binning.
+        group_ids: Group id array aligned with all samples.
+        n_bins: Number of bins to build.
+        seed: Random seed used before ordering groups greedily.
+
+    Returns:
+        list[np.ndarray]: Group-preserving bins of sample indices.
+    """
 
     local_group_ids = group_ids[candidate_indices]
     unique_groups = np.unique(local_group_ids)
@@ -171,7 +383,18 @@ def make_kfold_split(
     seed: int = 42,
     candidate_indices: Optional[Sequence[int]] = None,
 ) -> SplitIndices:
-    """Create one fold of a standard K-fold split."""
+    """Create one fold of a standard K-fold split.
+
+    Args:
+        num_samples: Total sample count.
+        n_splits: Number of folds.
+        fold: Fold index used as validation.
+        seed: Random seed used for shuffling.
+        candidate_indices: Optional subset of samples that may participate in the split.
+
+    Returns:
+        SplitIndices: K-fold split with `train` and `val` populated.
+    """
 
     _validate_kfold_args(n_splits, fold)
     indices = _as_index_array(candidate_indices, num_samples).copy()
@@ -198,7 +421,19 @@ def make_group_kfold_split(
     seed: int = 42,
     candidate_indices: Optional[Sequence[int]] = None,
 ) -> SplitIndices:
-    """Create one fold of a group-aware K-fold split."""
+    """Create one fold of a group-aware K-fold split.
+
+    Args:
+        num_samples: Total sample count.
+        group_ids: Group identifier for each sample.
+        n_splits: Number of folds.
+        fold: Fold index used as validation.
+        seed: Random seed used before balancing groups.
+        candidate_indices: Optional subset of samples that may participate in the split.
+
+        Returns:
+            SplitIndices: Group-aware K-fold split with `train` and `val` populated.
+    """
 
     _validate_kfold_args(n_splits, fold)
     indices = _as_index_array(candidate_indices, num_samples)
@@ -233,6 +468,15 @@ def make_dev_test_holdout_split(
 
     The dev partition is stored in `train` so callers can apply a second-stage
     train/val split later.
+
+    Args:
+        num_samples: Total sample count.
+        test_ratio: Fraction of candidate samples assigned to test.
+        seed: Random seed used for shuffling.
+        candidate_indices: Optional subset of samples that may participate in the split.
+
+    Returns:
+        SplitIndices: Split with `train` as development partition and `test` populated.
     """
 
     _validate_ratio("test_ratio", test_ratio)
@@ -260,7 +504,18 @@ def make_group_dev_test_holdout_split(
     seed: int = 42,
     candidate_indices: Optional[Sequence[int]] = None,
 ) -> SplitIndices:
-    """Create a group-aware dev/test holdout split."""
+    """Create a group-aware dev/test holdout split.
+
+    Args:
+        num_samples: Total sample count.
+        group_ids: Group identifier for each sample.
+        test_ratio: Target test ratio measured in samples.
+        seed: Random seed used for shuffling groups.
+        candidate_indices: Optional subset of samples that may participate in the split.
+
+    Returns:
+        SplitIndices: Group-aware split with `train` as development partition.
+    """
 
     _validate_ratio("test_ratio", test_ratio)
     indices = _as_index_array(candidate_indices, num_samples)

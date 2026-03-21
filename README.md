@@ -1,96 +1,122 @@
 # DeepLab Training Framework
 
-Hydra + PyTorch Lightning + MLflow/WandB based training framework.
+Hydra + PyTorch Lightning based training framework with two runtime units only:
 
-The framework is built around two Python runtime modes only:
+- `train`: one concrete training run
+- `cv`: repeated training runs across folds
 
-- `train`: one minimal training execution unit
-- `cv`: repeated training units across folds
+Higher-level experiment flows are implemented in a Python workflow layer and exposed through thin shell launchers.
 
-More complex workflows such as flat CV, nested CV, and HPO + refit are composed outside the runtime through scripts.
+## Core Principles
 
+- Hydra drives construction and runtime parameters.
+- The runtime only exposes `train` and `cv`.
+- Split policy is independent from datamodules.
+- Every run writes `run_summary.json` and `artifacts.json`.
+- Every workflow writes `workflow_summary.json` and `workflow_artifacts.json`.
 
-## 1. Core Principles
+## Recommended Code Layout
 
-- Hydra drives object construction and runtime parameters.
-- Python only exposes `train` and `cv`.
-- Complex workflows belong to shell orchestration.
-- Every run should produce a stable `run_summary.json`.
-
-
-## 2. Project Layout
+The recommended extension shape is:
 
 ```text
-deeplab/
-├── main.py
-├── conf/
-├── src/
-├── scripts/
-├── tests/
-├── CODEX.md
-├── FRAMEWORK_ARCHITECTURE.md
-├── FRAMEWORK_ARCHITECTURE_ZH.md
-└── DEVELOPMENT_GUIDE.md
+src/
+|-- models/
+|   |-- backbones/
+|   |-- heads/
+|   `-- tasks/
+`-- datamodules/
+    |-- datasets/
+    |-- transforms/
+    `-- manifests/
 ```
 
-Important directories:
+This repository already includes reference implementations for that layout:
 
-- [`conf`](/E:/projects/deeplab/conf): Hydra config groups
-- [`src/core`](/E:/projects/deeplab/src/core): bootstrap, mode dispatch, runtime, artifact contracts
-- [`src/datamodules`](/E:/projects/deeplab/src/datamodules): datamodules and split helpers
-- [`src/models`](/E:/projects/deeplab/src/models): model base class and example model
-- [`src/loggers`](/E:/projects/deeplab/src/loggers): backend adapters
-- [`scripts`](/E:/projects/deeplab/scripts): orchestration scripts
-- [`tests`](/E:/projects/deeplab/tests): minimal regression tests
+- [`src/models/backbones/tabular_mlp.py`](/E:/projects/deeplab/src/models/backbones/tabular_mlp.py)
+- [`src/models/heads/classification_head.py`](/E:/projects/deeplab/src/models/heads/classification_head.py)
+- [`src/models/tasks/tabular_classification.py`](/E:/projects/deeplab/src/models/tasks/tabular_classification.py)
+- [`src/datamodules/datasets/tabular_dataset.py`](/E:/projects/deeplab/src/datamodules/datasets/tabular_dataset.py)
+- [`src/datamodules/tabular_dm.py`](/E:/projects/deeplab/src/datamodules/tabular_dm.py)
+- [`src/datamodules/manifests/schema.py`](/E:/projects/deeplab/src/datamodules/manifests/schema.py)
 
+## Recommended Data Layout
 
-## 3. Minimal Usage
+Prefer manifest-driven data access over implicit directory scanning.
 
-### Single train run
+Example:
+
+```text
+data/
+`-- manifests/
+    `-- example_tabular.csv
+```
+
+Recommended manifest columns:
+
+- `sample_id`
+- `label`
+- `group`
+- `path` when samples live on disk
+
+Reference file:
+
+- [`example_tabular.csv`](/E:/projects/deeplab/data/manifests/example_tabular.csv)
+
+## Minimal Usage
+
+Single train run:
 
 ```bash
 python main.py mode=train
 ```
 
-### Single CV run
+Single CV run:
 
 ```bash
 python main.py mode=cv mode.n_folds=5
 ```
 
-### Override model or trainer parameters
+Run the reference tabular baseline:
+
+```bash
+python main.py +experiment=tabular_baseline
+```
+
+Override model or trainer parameters:
 
 ```bash
 python main.py \
-  mode=train \
-  experiment_name=my_exp \
-  run_name=trial_001 \
-  model.optimizer.lr=3e-4 \
-  trainer.max_epochs=20
+  +experiment=tabular_baseline \
+  model.init_args.optimizer.lr=3e-4 \
+  trainer.init_args.max_epochs=20
 ```
 
-
-## 4. Runtime Outputs
+## Runtime Outputs
 
 Each run writes artifacts under Hydra's output directory.
 
-Important files:
-
 - `config.yaml`: resolved config snapshot
 - `code/`: source snapshot
-- `run_summary.json`: stable runtime summary
+- `run_summary.json`: stable high-frequency summary
+- `artifacts.json`: artifact index for data, checkpoints, figures, and logger handles
 - `checkpoints/`: Lightning checkpoints
 
-`run_summary.json` is the artifact contract used by shell scripts and aggregation tools.
+CV and workflow aggregations additionally write:
 
+- `workflow_summary.json`
+- `workflow_artifacts.json`
 
-## 5. Config Structure
+## Config Structure
 
 The root config is [`conf/config.yaml`](/E:/projects/deeplab/conf/config.yaml).
 
 Main config groups:
 
 - `mode`
+- `artifacts`
+- `split`
+- `workflow`
 - `model`
 - `datamodule`
 - `logger`
@@ -99,75 +125,38 @@ Main config groups:
 - `paths`
 - `hydra`
 - `hpo`
+- `experiment`
 
-Default runtime values:
+The framework-owned object surface follows:
 
-- `experiment_name: ${project_name}`
-- `run_name: ${mode.name}`
+- `model._target_` + `model.init_args`
+- `datamodule._target_` + `datamodule.init_args`
+- `trainer._target_` + `trainer.init_args`
+- `logger.items`
+- `callbacks.items`
 
+## Workflow Entry Points
 
-## 6. Available Scripts
-
-### Flat CV style orchestration
-
-[`scripts/run_flat_cv.sh`](/E:/projects/deeplab/scripts/run_flat_cv.sh)
-
-Example:
-
-```bash
-bash scripts/run_flat_cv.sh my_exp flatcv 5 0.2 3e-4 1e-4
-```
-
-### Nested CV style orchestration
-
-[`scripts/run_nested_cv.sh`](/E:/projects/deeplab/scripts/run_nested_cv.sh)
-
-This script expects split manifests such as:
-
-```text
-splits/nested/outer_0/inner_0.yaml
-splits/nested/outer_0/inner_1.yaml
-splits/nested/outer_0/refit.yaml
-```
-
-### HPO entry
-
-[`scripts/hpo.sh`](/E:/projects/deeplab/scripts/hpo.sh)
-
-### CV search + manual refit helper
-
-[`scripts/run_cv_refit.sh`](/E:/projects/deeplab/scripts/run_cv_refit.sh)
-
-### Aggregate multiple summaries
-
-[`scripts/aggregate_json_metrics.py`](/E:/projects/deeplab/scripts/aggregate_json_metrics.py)
-
-Example:
+Flat CV:
 
 ```bash
-python scripts/aggregate_json_metrics.py "outputs/my_exp/**/run_summary.json" val_score
+bash scripts/run_flat_cv.sh --experiment-name my_exp --run-prefix flatcv --n-folds 5
 ```
 
+Nested CV:
 
-## 7. Extension Entry Points
+```bash
+bash scripts/run_nested_cv.sh --experiment-name my_exp --split-root splits/nested
+```
 
-If you want to extend the framework:
+HPO + refit:
 
-- add models under [`src/models`](/E:/projects/deeplab/src/models)
-- add datamodules under [`src/datamodules`](/E:/projects/deeplab/src/datamodules)
-- add split policies in [`src/datamodules/split.py`](/E:/projects/deeplab/src/datamodules/split.py)
-- add logger adapters under [`src/loggers`](/E:/projects/deeplab/src/loggers)
+```bash
+bash scripts/hpo.sh --experiment-name my_exp
+```
 
-Detailed guidance:
+## Related Docs
 
-- architecture report: [`FRAMEWORK_ARCHITECTURE.md`](/E:/projects/deeplab/FRAMEWORK_ARCHITECTURE.md)
-- 中文架构说明: [`FRAMEWORK_ARCHITECTURE_ZH.md`](/E:/projects/deeplab/FRAMEWORK_ARCHITECTURE_ZH.md)
-- developer guide: [`DEVELOPMENT_GUIDE.md`](/E:/projects/deeplab/DEVELOPMENT_GUIDE.md)
-
-
-## 8. Recommended Workflow
-
-1. Use `train` to validate a single execution unit.
-2. Use `cv` when you need fold-level repetition inside the runtime.
-3. Use scripts for flat CV, nested CV, HPO, and refit workflows.
-4. Consume `run_summary.json` instead of depending on implicit internal paths.
+- [`FRAMEWORK_ARCHITECTURE.md`](/E:/projects/deeplab/FRAMEWORK_ARCHITECTURE.md)
+- [`FRAMEWORK_ARCHITECTURE_ZH.md`](/E:/projects/deeplab/FRAMEWORK_ARCHITECTURE_ZH.md)
+- [`DEVELOPMENT_GUIDE.md`](/E:/projects/deeplab/DEVELOPMENT_GUIDE.md)

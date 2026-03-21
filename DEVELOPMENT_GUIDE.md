@@ -4,193 +4,171 @@
 
 When extending this framework, follow these rules first:
 
-1. Do not add new Python top-level modes unless the framework boundary itself changes.
-2. Prefer Hydra config composition over hard-coded runtime branching.
-3. Datamodules consume split artifacts. They should not own split policy.
+1. Do not add new Python top-level modes unless the runtime boundary itself changes.
+2. Prefer Hydra composition over hard-coded branching.
+3. Datamodules consume split artifacts. They do not own split policy.
 4. Logger-specific behavior belongs in adapters, not in model code or `runner.py`.
-5. Shell scripts orchestrate complex workflows. Python runtime executes minimal units.
+5. Workflow orchestration belongs in `src/workflows`, not in ad hoc shell logic.
 
+## 2. Recommended Project Shape
 
-## 2. How to Add a New Model
+Use the following layout for real projects:
+
+```text
+src/
+|-- models/
+|   |-- backbones/
+|   |-- heads/
+|   `-- tasks/
+`-- datamodules/
+    |-- datasets/
+    |-- transforms/
+    `-- manifests/
+```
+
+Recommended responsibilities:
+
+- `models/backbones`: reusable feature extractors
+- `models/heads`: task heads
+- `models/tasks`: Lightning task modules
+- `datamodules/datasets`: sample-level reading
+- `datamodules/transforms`: optional preprocessing and augmentation
+- `datamodules/manifests`: manifest column schema and helpers
+
+## 3. How to Add a New Model
 
 ### Step 1
 
-Create a model file under [`src/models`](/E:/projects/deeplab/src/models).
+Add reusable network pieces under:
 
-The model should either:
-
-- inherit from [`BaseModel`](/E:/projects/deeplab/src/models/base_model.py)
-- or implement a custom `LightningModule` if the task semantics are very different
+- [`src/models/backbones`](/E:/projects/deeplab/src/models/backbones)
+- [`src/models/heads`](/E:/projects/deeplab/src/models/heads)
 
 ### Step 2
+
+Add the task-level Lightning module under:
+
+- [`src/models/tasks`](/E:/projects/deeplab/src/models/tasks)
+
+Use [`tabular_classification.py`](/E:/projects/deeplab/src/models/tasks/tabular_classification.py) as the reference structure.
+
+### Step 3
 
 Create a Hydra config under [`conf/model`](/E:/projects/deeplab/conf/model).
 
-The config should define:
+The preferred shape is:
 
-- `_target_`
-- task-specific model config
-- optimizer config
-- scheduler config
+```yaml
+_target_: src.models.tasks.your_task.YourTaskModel
+_recursive_: false
 
-### Step 3
-
-Run with overrides such as:
-
-```bash
-python main.py model=<your_model_group>
+init_args:
+  model_cfg: {...}
+  metrics_cfg: {...}
+  optimizer: {...}
+  scheduler: {...}
 ```
 
 ### Rule
 
-Do not put logger branching, artifact naming, or output path logic into model code.
+Do not put split policy, logger branching, artifact naming, or output path logic into model code.
 
-
-## 3. How to Add a New Datamodule
+## 4. How to Add a New Datamodule
 
 ### Step 1
 
-Create the datamodule under [`src/datamodules`](/E:/projects/deeplab/src/datamodules).
+Add sample reading logic under [`src/datamodules/datasets`](/E:/projects/deeplab/src/datamodules/datasets).
 
 ### Step 2
 
-Accept `split_indices` and optionally `split_file` as inputs.
+Add the datamodule under [`src/datamodules`](/E:/projects/deeplab/src/datamodules).
 
-That means your datamodule constructor should be compatible with the runtime builder:
+Use [`tabular_dm.py`](/E:/projects/deeplab/src/datamodules/tabular_dm.py) as the reference implementation.
+
+### Step 3
+
+Keep the constructor compatible with the runtime builder:
 
 ```python
-def __init__(self, data_cfg, split_indices=None, *args, **kwargs):
+def __init__(self, data_cfg, split_indices=None, split_provider=None, *args, **kwargs):
     ...
 ```
 
-### Step 3
+### Step 4
 
-Consume the split to build dataset partitions in `setup()`.
-
-### Rule
-
-Do not reintroduce `fold`, `n_splits`, or split policy decisions into datamodule config unless the datamodule is the explicit owner of a standalone dataset preparation workflow.
-
-
-## 4. How to Add a New Logger Backend
-
-### Step 1
-
-Add a new handler under [`src/loggers`](/E:/projects/deeplab/src/loggers).
-
-### Step 2
-
-Implement the same interface as [`BaseLoggerHandler`](/E:/projects/deeplab/src/loggers/base.py).
-
-### Step 3
-
-Register the Lightning logger type and handler in [`src/loggers/__init__.py`](/E:/projects/deeplab/src/loggers/__init__.py).
+Build train/val/test partitions in `setup()` by consuming split artifacts instead of deriving fold logic locally.
 
 ### Rule
 
-Do not add backend-specific `if isinstance(logger, ...)` logic into:
+Do not put `fold`, `n_splits`, `outer_fold`, or `inner_fold` into datamodule behavior.
 
-- [`src/models/base_model.py`](/E:/projects/deeplab/src/models/base_model.py)
-- [`src/core/runner.py`](/E:/projects/deeplab/src/core/runner.py)
+## 5. Recommended Data Entry Contract
 
+Prefer a manifest file over implicit directory scanning.
 
-## 5. How to Add a New Split Policy
+Example CSV:
 
-### Step 1
+```text
+sample_id,label,group,f0,f1,f2,f3
+s001,0,p001,0.10,0.20,0.30,0.40
+```
 
-Add the policy to [`src/datamodules/split.py`](/E:/projects/deeplab/src/datamodules/split.py).
+Recommended columns:
 
-### Step 2
+- `sample_id`
+- `label`
+- `group`
+- `path` when data lives on disk
 
-Keep it framework-agnostic:
+See [`schema.py`](/E:/projects/deeplab/src/datamodules/manifests/schema.py) for the recommended manifest column contract.
 
-- input is metadata or candidate indices
-- output is `SplitIndices`
+## 6. Hydra Config Conventions
 
-### Step 3
+Model config:
 
-If the policy needs to be persisted, store it as a split manifest and let the datamodule read it through `split_file`.
+- [`tabular_classification.yaml`](/E:/projects/deeplab/conf/model/cpath/tabular_classification.yaml)
 
-### Rule
+Datamodule config:
 
-Do not bury split rules inside:
+- [`tabular_manifest.yaml`](/E:/projects/deeplab/conf/datamodule/cpath/tabular_manifest.yaml)
 
-- shell scripts only
-- datamodule internals only
-- mode-specific ad hoc logic
+Experiment config:
 
+- [`tabular_baseline.yaml`](/E:/projects/deeplab/conf/experiment/tabular_baseline.yaml)
 
-## 6. What Belongs in Config
+Recommended ownership:
 
-Use Hydra config for things that define object construction or runtime parameters:
+- `conf/model`: architecture and optimization
+- `conf/datamodule`: data reading parameters
+- `conf/experiment`: project-level experiment bundles
 
-- model class and hyperparameters
-- datamodule class and data parameters
-- logger backend selection
-- trainer parameters
-- callbacks
-- monitor metric
-- whether to run test after training
+## 7. What Belongs in Runtime Contracts
 
+Extend runtime contracts only when orchestration or downstream consumers need stable access.
 
-## 7. What Belongs in Shell Orchestration
-
-Use shell scripts for workflow composition such as:
-
-- running multiple folds as separate train jobs
-- nested CV
-- HPO search followed by refit
-- aggregation across multiple `run_summary.json` files
-- comparisons between multiple candidate override sets
-
-If the logic is “repeat multiple minimal runs and compare outputs”, it usually belongs in scripts.
-
-
-## 8. What Belongs in Runtime Contracts
-
-Add data to the runtime contract only when orchestration code needs to consume it reliably.
-
-Examples:
+Typical examples:
 
 - best checkpoint path
-- resolved config path
-- val/test metrics
+- summary path
+- artifact index path
+- data artifact paths
 - fold id
-- output directory
 
-If a script depends on some value, that value should usually be written into `run_summary.json`.
+## 8. Anti-Patterns to Avoid
 
+Do not introduce these patterns:
 
-## 9. Anti-Patterns to Avoid
+- model code branching on logger type
+- datamodule code choosing fold strategy
+- workflow logic hidden inside datamodule or model
+- dataset parsing hard-coded directly inside task models
+- relying on implicit directory names instead of manifest or artifact contracts
 
-Do not introduce these patterns again:
+## 9. Reference Files
 
-- adding `mode=nested_cv` or similar high-order Python modes
-- branching on logger `_target_` inside runtime code
-- putting split ownership back into datamodules
-- making scripts depend on hidden file names that are not part of the artifact contract
-- mixing bootstrap logic with experiment execution logic
-- letting model code know too much about external experiment backends
-
-
-## 10. Recommended Workflow for New Features
-
-1. Decide whether the feature belongs to config, runtime, datamodule/model, or shell orchestration.
-2. If scripts need to consume the result, extend the runtime contract first.
-3. Keep the Python mode surface unchanged unless absolutely necessary.
-4. Add or update a minimal test around split behavior or artifact contracts.
-
-
-## 11. Reference Files
-
-Useful files to follow when extending the framework:
-
-- [`main.py`](/E:/projects/deeplab/main.py)
-- [`src/core/runner.py`](/E:/projects/deeplab/src/core/runner.py)
-- [`src/core/contracts.py`](/E:/projects/deeplab/src/core/contracts.py)
-- [`src/datamodules/dummy_dm.py`](/E:/projects/deeplab/src/datamodules/dummy_dm.py)
-- [`src/datamodules/split.py`](/E:/projects/deeplab/src/datamodules/split.py)
-- [`src/models/base_model.py`](/E:/projects/deeplab/src/models/base_model.py)
-- [`src/loggers/__init__.py`](/E:/projects/deeplab/src/loggers/__init__.py)
-- [`scripts/run_flat_cv.sh`](/E:/projects/deeplab/scripts/run_flat_cv.sh)
-- [`scripts/run_nested_cv.sh`](/E:/projects/deeplab/scripts/run_nested_cv.sh)
+- [`src/models/tasks/tabular_classification.py`](/E:/projects/deeplab/src/models/tasks/tabular_classification.py)
+- [`src/models/backbones/tabular_mlp.py`](/E:/projects/deeplab/src/models/backbones/tabular_mlp.py)
+- [`src/models/heads/classification_head.py`](/E:/projects/deeplab/src/models/heads/classification_head.py)
+- [`src/datamodules/tabular_dm.py`](/E:/projects/deeplab/src/datamodules/tabular_dm.py)
+- [`src/datamodules/datasets/tabular_dataset.py`](/E:/projects/deeplab/src/datamodules/datasets/tabular_dataset.py)
+- [`src/datamodules/manifests/schema.py`](/E:/projects/deeplab/src/datamodules/manifests/schema.py)

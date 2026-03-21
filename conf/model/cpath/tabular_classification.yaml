@@ -1,0 +1,25 @@
+_target_: src.models.tasks.tabular_classification.TabularClassificationModel
+_recursive_: false
+
+init_args:
+  model_cfg:
+    model_name: tabular_mlp_classifier
+    input_dim: 4
+    hidden_dims: [128, 64]
+    dropout: 0.1
+    num_classes: 2
+  metrics_cfg:
+    Accuracy:
+      task: multiclass
+      num_classes: 2
+    F1Score:
+      task: multiclass
+      num_classes: 2
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 0.0003
+    weight_decay: 0.0001
+  scheduler:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: ${trainer.init_args.max_epochs}
+    eta_min: 1e-6

@@ -13,6 +13,18 @@ class WandBLoggerHandler(BaseLoggerHandler):
         caption: str = "",
         step: Optional[int] = None,
     ) -> None:
+        """Log a figure to Weights & Biases.
+
+        Args:
+            figure: Matplotlib figure to log.
+            file_path: Artifact-relative name shown in WandB.
+            caption: Caption displayed with the image.
+            step: Optional step value used by WandB.
+
+        Returns:
+            None: The function logs the image through WandB side effects.
+        """
+
         import wandb
 
         payload = {file_path: wandb.Image(figure, caption=caption)}

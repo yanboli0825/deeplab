@@ -2,6 +2,7 @@
 outputs
 
 # IDE
+__pycache__
 .vscode/
 .idea/
 *.swp

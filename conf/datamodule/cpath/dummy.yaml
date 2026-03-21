@@ -1,9 +1,11 @@
 _target_: src.datamodules.dummy_dm.DummyDataModule
+_recursive_: false
 
-data_cfg:
-  dataset_name: dummy_dataset
-  batch_size: 32
-  num_workers: 2
-  total_samples: 120
-  val_ratio: 0.2
-  test_ratio: 0.1
+init_args:
+  data_cfg:
+    dataset_name: dummy_dataset
+    batch_size: 32
+    num_workers: 2
+    total_samples: 120
+    val_ratio: 0.2
+    test_ratio: 0.1

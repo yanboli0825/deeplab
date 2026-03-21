@@ -1,5 +1,6 @@
-_target_: lightning.pytorch.loggers.MLFlowLogger
-experiment_name: ${experiment_name}
-run_name: ${run_name}
-tracking_uri: ${oc.env:MLFLOW_TRACKING_URI}
-log_model: True
+items:
+  - _target_: lightning.pytorch.loggers.MLFlowLogger
+    experiment_name: ${experiment_name}
+    run_name: ${run_name}
+    tracking_uri: ${oc.env:MLFLOW_TRACKING_URI}
+    log_model: true

@@ -10,6 +10,16 @@ from typing import List
 
 
 def _load_values(pattern: str, field: str) -> List[float]:
+    """Load one numeric field from all matching summary files.
+
+    Args:
+        pattern: Recursive glob used to find summary files.
+        field: Numeric field extracted from each JSON payload.
+
+    Returns:
+        List[float]: Valid numeric values collected from matching files.
+    """
+
     values: List[float] = []
     for path in sorted(glob.glob(pattern, recursive=True)):
         with open(path, "r", encoding="utf-8") as f:
@@ -27,6 +37,12 @@ def _load_values(pattern: str, field: str) -> List[float]:
 
 
 def main() -> int:
+    """Run the command-line aggregator.
+
+    Returns:
+        int: Process exit code, `0` on success and `1` on invalid usage.
+    """
+
     if len(sys.argv) != 3:
         print("Usage: aggregate_json_metrics.py '<glob>' <field>", file=sys.stderr)
         return 1

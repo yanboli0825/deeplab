@@ -5,10 +5,15 @@ from typing import Any, Dict
 
 import lightning as L
 from omegaconf import DictConfig, OmegaConf
+import yaml
 
 
 def load_dotenv() -> None:
-    """Load environment variables from the nearest `.env` file when available."""
+    """Load environment variables from the nearest `.env` file when available.
+
+    Returns:
+        None: The function is used for its side effect of loading environment variables.
+    """
 
     try:
         from dotenv import find_dotenv, load_dotenv
@@ -23,7 +28,16 @@ def log_hyperparameters(
     model: L.LightningModule,
     trainer: L.Trainer,
 ) -> None:
-    """Log the resolved config and parameter counts to every configured logger."""
+    """Log the resolved config and parameter counts to every configured logger.
+
+    Args:
+        cfg: Fully resolved runtime configuration.
+        model: Instantiated Lightning model used to count parameters.
+        trainer: Trainer that owns the configured loggers.
+
+    Returns:
+        None: The function is used for its side effect of logging hyperparameters.
+    """
 
     hparams = OmegaConf.to_container(cfg, resolve=True)
     hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
@@ -36,27 +50,67 @@ def log_hyperparameters(
 
 
 def save_json(payload: Dict[str, Any], path: str) -> None:
-    """Write a JSON artifact with UTF-8 encoding."""
+    """Write a JSON artifact with UTF-8 encoding.
+
+    Args:
+        payload: Serializable mapping written to disk.
+        path: Destination path for the JSON file.
+
+    Returns:
+        None: The function writes a file and does not return a value.
+    """
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
 
+def save_yaml(payload: Dict[str, Any], path: str) -> None:
+    """Write a YAML artifact with UTF-8 encoding.
+
+    Args:
+        payload: Serializable mapping written to disk.
+        path: Destination path for the YAML file.
+
+    Returns:
+        None: The function writes a file and does not return a value.
+    """
+
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(payload, f, sort_keys=False, allow_unicode=True)
+
+
 def write_resolved_config(cfg: DictConfig, path: str) -> None:
-    """Persist a fully resolved Hydra config snapshot."""
+    """Persist a fully resolved Hydra config snapshot.
+
+    Args:
+        cfg: Runtime configuration to resolve and write.
+        path: Destination path for the config snapshot.
+
+    Returns:
+        None: The function writes a file and does not return a value.
+    """
 
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     OmegaConf.save(config=cfg, f=path, resolve=True)
 
 
 def snapshot_code(exp_dir: str, code_dir: str = "code") -> None:
-    """Copy Python source files into the run directory for reproducibility."""
+    """Copy Python source files into the run directory for reproducibility.
+
+    Args:
+        exp_dir: Root directory of the current run or experiment.
+        code_dir: Relative directory name used to store the copied source tree.
+
+    Returns:
+        None: The function copies files and directories for reproducibility.
+    """
 
     code_full_dir = os.path.join(exp_dir, code_dir)
     os.makedirs(code_full_dir, exist_ok=True)
 
-    exclude_dirs = {"outputs", ".git", "__pycache__", "data"}
+    exclude_dirs = {"outputs", ".git", "__pycache__", "scripts"}
     exclude_files = {".env", ".DS_Store"}
 
     for item in os.listdir("."):

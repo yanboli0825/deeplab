@@ -1,19 +1,15 @@
 _target_: src.models.dummy_model.DummyModel
-_recursive_: False
+_recursive_: false
 
-model_cfg:
-  model_name: dummy_model
-  num_classes: 2
-
-optimizer:
-  _target_: torch.optim.AdamW
-  # _partial_: True
-  lr: 0.0001
-  weight_decay: 0.0001
-
-scheduler:
-  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
-  # _partial_: True
-  T_max: ${trainer.max_epochs}
-  eta_min: 1e-6
-  
+init_args:
+  model_cfg:
+    model_name: dummy_model
+    num_classes: 2
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 0.0001
+    weight_decay: 0.0001
+  scheduler:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: ${trainer.init_args.max_epochs}
+    eta_min: 1e-6

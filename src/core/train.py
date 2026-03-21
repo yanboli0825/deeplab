@@ -4,6 +4,18 @@ from src.core.runner import run_experiment
 
 
 def train_loop(cfg: DictConfig) -> float:
+    """Run one minimal training execution unit.
+
+    Args:
+        cfg: Resolved runtime configuration for the current training run.
+
+    Returns:
+        float: Test score when `test_after_train=true`, otherwise validation score.
+
+    Raises:
+        ValueError: Raised when test mode is requested but no test score is produced.
+    """
+
     result = run_experiment(cfg)
 
     if cfg.get("test_after_train", False):
