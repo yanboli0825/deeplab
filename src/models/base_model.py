@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 import torchmetrics
+from omegaconf import OmegaConf
 
 from src.loggers import LoggerFactory
 

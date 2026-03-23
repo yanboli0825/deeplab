@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from torch.utils.data import DataLoader
 
-from src.datamodules.base import BaseDataModule
+from src.datamodules.base_dm import BaseDataModule
 from src.datamodules.datasets.tabular_dataset import TabularDataset
 from src.datamodules.manifests.schema import ManifestColumns
 from src.datamodules.split import SplitIndices

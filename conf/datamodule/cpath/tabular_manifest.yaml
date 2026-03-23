@@ -1,4 +1,5 @@
 _target_: src.datamodules.tabular_dm.TabularClassificationDataModule
+_recursive_: false
 
 init_args:
   data_cfg:

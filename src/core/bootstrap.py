@@ -1,10 +1,13 @@
 """Bootstrap helpers kept outside the mode dispatch layer."""
 
 import os
+import typing
 from dataclasses import dataclass
 
+import torch
 import lightning as L
-from omegaconf import DictConfig
+import omegaconf
+from omegaconf import DictConfig, OmegaConf
 
 from src.utils.misc import load_dotenv, snapshot_code, write_resolved_config
 
@@ -30,6 +33,8 @@ def bootstrap_app(cfg: DictConfig) -> BootstrapArtifacts:
 
     load_dotenv()
     L.seed_everything(int(cfg.get("seed", 42)), workers=True)
+    # torch.serialization.add_safe_globals([omegaconf.dictconfig.DictConfig, omegaconf.base.ContainerMetadata, typing.Any])
+
 
     output_dir = cfg.paths.output_dir
     os.makedirs(output_dir, exist_ok=True)

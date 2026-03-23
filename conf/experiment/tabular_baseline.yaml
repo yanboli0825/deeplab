@@ -1,3 +1,5 @@
+# @package _global_
+
 defaults:
   - override /model: cpath/tabular_classification
   - override /datamodule: cpath/tabular_manifest

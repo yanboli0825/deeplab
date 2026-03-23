@@ -11,6 +11,7 @@ defaults:
   - trainer: default
   - paths: default
   - hydra: default
+  - optional experiment: null
   - hpo: null
 
 project_name: deeplab

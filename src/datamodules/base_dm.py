@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import lightning as L
 import numpy as np
 import yaml
+from omegaconf import OmegaConf
 
 from src.datamodules.split import SplitIndices, SplitProvider
 from src.utils.misc import save_json, save_yaml

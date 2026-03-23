@@ -27,7 +27,8 @@ def build_model(cfg: DictConfig) -> L.LightningModule:
         L.LightningModule: Instantiated task model.
     """
 
-    return hydra.utils.instantiate(_materialize_object_config(cfg))
+    materialized_cfg = _materialize_object_config(cfg)
+    return hydra.utils.instantiate(materialized_cfg)
 
 
 def _materialize_object_config(cfg: DictConfig) -> DictConfig:
@@ -129,8 +130,9 @@ def build_datamodule(
         L.LightningDataModule: Instantiated datamodule.
     """
 
+    materialized_cfg = _materialize_object_config(cfg)
     return hydra.utils.instantiate(
-        _materialize_object_config(cfg),
+        materialized_cfg,
         split_indices=split_indices,
         split_provider=split_provider,
     )

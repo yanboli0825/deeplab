@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from src.datamodules.base import BaseDataModule
+from src.datamodules.base_dm import BaseDataModule
 from src.datamodules.split import SplitIndices
 
 

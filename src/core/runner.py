@@ -335,6 +335,8 @@ def run_experiment(
 
     context = _build_run_context(cfg, fold=fold, run_name_suffix=run_name_suffix)
     local_cfg = _with_runtime_context(cfg, context)
+
+    # resolve configurations and save it
     resolved_cfg = _resolve_runtime_config(local_cfg)
     os.makedirs(context.output_dir, exist_ok=True)
     write_resolved_config(resolved_cfg, context.resolved_config_path)
@@ -376,6 +378,7 @@ def run_experiment(
             model=model,
             datamodule=datamodule,
             ckpt_path=best_ckpt_path,
+            weights_only=False,
         )
         test_monitor = monitor.replace("val/", "test/")
         if test_results:
