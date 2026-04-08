@@ -4,7 +4,7 @@ _recursive_: true
 init_args:
   accelerator: gpu
   devices: [0]
-  max_epochs: 3
+  max_epochs: 200
   enable_progress_bar: true
   log_every_n_steps: 10
   num_sanity_val_steps: 0

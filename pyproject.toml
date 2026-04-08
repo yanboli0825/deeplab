@@ -12,6 +12,7 @@ dependencies = [
     "omegaconf",
     "numpy",
     "torch",
+    "tqdm",
     "torchmetrics",
     "pyyaml>=6.0",
     "python-dotenv",
@@ -19,6 +20,7 @@ dependencies = [
     "optuna",
     "matplotlib",
     "seaborn",
+    "scikit-learn",
 ]
 
 [project.optional-dependencies]

@@ -1,4 +1,4 @@
-_target_: src.models.tasks.tabular_classification.TabularClassificationModel
+_target_: src.models.tabular.tabular_classification.TabularClassificationModel
 _recursive_: false
 
 init_args:

@@ -1,5 +1,9 @@
+# envs
 .env
+
+# data and results
 outputs
+data
 
 # IDE
 __pycache__

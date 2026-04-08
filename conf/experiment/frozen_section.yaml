@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - override /model: cpath/dummy
+  - override /datamodule: cpath/frozen_section
+  - override /logger: mlflow
+  - override /trainer: default
+
+experiment_name: test_fs
+run_name: test_optuna
+monitor: val/loss
+test_after_train: false

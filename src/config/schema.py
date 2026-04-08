@@ -7,25 +7,17 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 
 
 @dataclass
-class TrainModeConfig:
-    """Built-in single-run execution mode."""
+class ModeConfig:
+    """Built-in execution mode config shared by train and cv."""
 
     name: str = "train"
-
-
-@dataclass
-class CvModeConfig:
-    """Built-in fold-loop execution mode."""
-
-    name: str = "cv"
-    n_folds: int = 5
+    n_folds: Optional[int] = None
 
 
 @dataclass
 class PathsConfig:
     """Filesystem paths consumed by the framework runtime."""
 
-    data_dir: str = "data"
     output_dir: str = "outputs"
 
 
@@ -54,7 +46,6 @@ class ArtifactConfig:
     workflow_summary_name: str = "workflow_summary.json"
     workflow_index_name: str = "workflow_artifacts.json"
     split_manifest_name: str = "split_manifest.yaml"
-    dataset_summary_name: str = "dataset_summary.json"
 
 
 @dataclass
@@ -62,15 +53,13 @@ class SplitConfig:
     """Framework-level split policy configuration."""
 
     method: Optional[str] = None
-    num_samples: Optional[int] = None
-    n_splits: int = 5
-    val_ratio: float = 0.2
-    test_ratio: float = 0.2
+    data_file: Optional[str] = None
+    group_id_column: Optional[str] = None
+    label_column: Optional[str] = None
+    n_folds: Optional[int] = None
+    val_ratio: float = 0.1
+    test_ratio: float = 0.1
     seed: int = 42
-    fold: Optional[int] = None
-    candidate_indices: Optional[List[int]] = None
-    group_ids: Optional[List[int]] = None
-    manifest_path: Optional[str] = None
 
 
 @dataclass
@@ -114,7 +103,7 @@ class AppConfig:
     monitor: str = "val/loss"
     test_after_train: bool = False
     resume_ckpt: Optional[str] = None
-    mode: Dict[str, Any] = field(default_factory=lambda: {"name": "train"})
+    mode: ModeConfig = field(default_factory=ModeConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     artifacts: ArtifactConfig = field(default_factory=ArtifactConfig)
@@ -240,12 +229,11 @@ def _validate_mode(mode_cfg: DictConfig) -> None:
     """
 
     mode_name = str(mode_cfg.get("name", "train"))
+    validated = OmegaConf.merge(OmegaConf.structured(ModeConfig), mode_cfg)
     if mode_name == "train":
-        OmegaConf.merge(OmegaConf.structured(TrainModeConfig), mode_cfg)
         return
     if mode_name == "cv":
-        validated = OmegaConf.merge(OmegaConf.structured(CvModeConfig), mode_cfg)
-        if int(validated.n_folds) < 2:
+        if validated.n_folds is None or int(validated.n_folds) < 2:
             raise ValueError("cv mode requires mode.n_folds >= 2")
         return
     raise ValueError(f"Unsupported mode '{mode_name}'. Only 'train' and 'cv' are allowed.")

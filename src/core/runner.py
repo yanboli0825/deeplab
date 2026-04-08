@@ -7,7 +7,6 @@ from typing import Any, Optional
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from src.core.contracts import ArtifactIndex, RunContext, RunSummary
-from src.datamodules.split import SplitIndices
 from src.utils.build import (
     build_callbacks,
     build_datamodule,
@@ -17,6 +16,17 @@ from src.utils.build import (
     build_trainer,
 )
 from src.utils.misc import log_hyperparameters, save_json, write_resolved_config
+
+KFOLD_METHODS = {
+    "kfold",
+    "group_kfold",
+    "dev_test_kfold",
+    "group_dev_test_kfold",
+    "stratified_kfold",
+    "stratified_group_kfold",
+    "stratified_dev_test_kfold",
+    "stratified_group_dev_test_kfold",
+}
 
 
 @dataclass
@@ -80,6 +90,54 @@ def _resolve_suffix(
     if fold is not None:
         return f"fold{fold}"
     return None
+
+
+def _flatten_best_metrics(best_metrics: dict[str, Any]) -> dict[str, float]:
+    """Flatten structured best-metric payload into MLflow scalar keys."""
+
+    if not best_metrics:
+        return {}
+
+    flattened: dict[str, float] = {}
+    epoch = best_metrics.get("epoch")
+    if epoch is not None:
+        flattened["best/epoch"] = float(epoch)
+    monitor_value = best_metrics.get("monitor_value")
+    if monitor_value is not None:
+        flattened["best/monitor_value"] = float(monitor_value)
+
+    for stage in ("val", "test"):
+        payload = best_metrics.get(stage)
+        if not isinstance(payload, dict):
+            continue
+        for key, value in payload.items():
+            flattened[f"best/{stage}_{key}"] = _to_float(value)
+    return flattened
+
+
+def _log_best_metrics_to_mlflow(logger: Any, best_metrics: dict[str, Any]) -> None:
+    """Log final best metrics once to any configured MLflow logger."""
+
+    if not best_metrics or logger in (None, False):
+        return
+
+    flattened = _flatten_best_metrics(best_metrics)
+    if not flattened:
+        return
+
+    loggers = logger if isinstance(logger, list) else [logger]
+    for item in loggers:
+        if type(item).__name__ != "MLFlowLogger":
+            continue
+        client = getattr(item, "experiment", None)
+        run_id = getattr(item, "run_id", None)
+        if client is None or run_id is None:
+            continue
+        for key, value in flattened.items():
+            client.log_metric(run_id, key, value)
+        monitor = best_metrics.get("monitor")
+        if monitor is not None:
+            client.set_tag(run_id, "best/monitor", str(monitor))
 
 
 def _resolve_experiment_name(cfg: DictConfig) -> str:
@@ -315,7 +373,6 @@ def run_experiment(
     cfg: DictConfig,
     fold: Optional[int] = None,
     ckpt_path: Optional[str] = None,
-    split_indices: Optional[SplitIndices] = None,
     run_name_suffix: Optional[str] = None,
     keep_artifacts: bool = False,
 ) -> RunResult:
@@ -325,13 +382,16 @@ def run_experiment(
         cfg: Resolved runtime configuration.
         fold: Optional fold index for CV-style execution.
         ckpt_path: Optional checkpoint path used to resume or test.
-        split_indices: Explicit split indices injected by upstream orchestration.
         run_name_suffix: Optional suffix appended to the base run name.
         keep_artifacts: Whether to keep in-memory model and datamodule references.
 
     Returns:
         RunResult: In-memory result object containing summary, context, and artifact index.
     """
+
+    split_method = cfg.get("split", {}).get("method")
+    if split_method in KFOLD_METHODS and fold is None:
+        fold = 0
 
     context = _build_run_context(cfg, fold=fold, run_name_suffix=run_name_suffix)
     local_cfg = _with_runtime_context(cfg, context)
@@ -345,7 +405,6 @@ def run_experiment(
     model = build_model(resolved_cfg.model)
     datamodule = build_datamodule(
         resolved_cfg.datamodule,
-        split_indices=split_indices,
         split_provider=provider,
     )
     logger = build_logger(resolved_cfg.logger)
@@ -384,6 +443,9 @@ def run_experiment(
         if test_results:
             test_score = _to_float(test_results[0].get(test_monitor))
 
+    best_metrics = getattr(model, "best_metrics", {}) or {}
+    _log_best_metrics_to_mlflow(logger, best_metrics)
+
     summary = RunSummary(
         mode=context.mode,
         experiment_name=context.experiment_name,
@@ -397,6 +459,7 @@ def run_experiment(
         last_val_score=last_val_score,
         test_score=test_score,
         best_ckpt_path=best_ckpt_path,
+        best_metrics=best_metrics,
         fold=fold,
     )
     save_json(summary.to_dict(), context.summary_path)

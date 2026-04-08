@@ -15,6 +15,6 @@ hydra:
     n_jobs: 1         # 并行度
     params:
       # 定义搜索空间，直接覆盖 model 和 datamodule 中的参数
-      model.optimizer.lr: interval(1e-4, 1e-2)
+      model.init_args.optimizer.lr: interval(1e-4, 1e-2)
 #      model.weight_decay: choice(1e-4, 1e-5, 0.0)
 #      data.batch_size: choice(16, 32, 64)

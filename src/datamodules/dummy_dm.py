@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from src.datamodules.base_dm import BaseDataModule
-from src.datamodules.split import SplitIndices
+from src.datamodules.split import SplitIndices, SplitProvider
 
 
 class DummyDataset(Dataset):
@@ -50,20 +50,20 @@ class DummyDataset(Dataset):
 
 
 class DummyDataModule(BaseDataModule):
-    """Reference datamodule that consumes split artifacts and emits data metadata."""
+    """Reference datamodule that consumes split artifacts."""
 
     def __init__(
         self,
         data_cfg: Dict[str, Any],
-        split_indices: Optional[SplitIndices] = None,
+        split_provider: Optional[SplitProvider] = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         """Initialize the reference datamodule.
 
         Args:
-            data_cfg: Datamodule configuration such as batch size and sample counts.
-            split_indices: Optional externally supplied split indices.
+            data_cfg: Datamodule configuration such as batch size and dummy sample count.
+            split_provider: Optional split provider supplied by the runtime.
             *args: Extra positional arguments kept for compatibility.
             **kwargs: Extra keyword arguments kept for compatibility.
 
@@ -71,7 +71,7 @@ class DummyDataModule(BaseDataModule):
             None: The constructor initializes dataset holders.
         """
 
-        super().__init__(data_cfg=data_cfg, split_indices=split_indices, *args, **kwargs)
+        super().__init__(data_cfg=data_cfg, split_provider=split_provider, *args, **kwargs)
         self.train_dataset: Optional[DummyDataset] = None
         self.val_dataset: Optional[DummyDataset] = None
         self.test_dataset: Optional[DummyDataset] = None
@@ -95,15 +95,15 @@ class DummyDataModule(BaseDataModule):
         self.emit_data_artifacts()
 
     def _default_split(self) -> SplitIndices:
-        """Create a simple deterministic split from sample count ratios.
+        """Create a simple deterministic split from a fixed local policy.
 
         Returns:
             SplitIndices: Default train/val/test split for the dummy dataset.
         """
 
-        total_samples = int(self.hparams.data_cfg.get("total_samples", 120))
-        val_ratio = float(self.hparams.data_cfg.get("val_ratio", 0.2))
-        test_ratio = float(self.hparams.data_cfg.get("test_ratio", 0.1))
+        total_samples = int(self.hparams.data_cfg.get("num_samples", 120))
+        val_ratio = 0.2
+        test_ratio = 0.1
 
         all_indices = np.arange(total_samples, dtype=int)
         n_test = int(round(total_samples * test_ratio))
@@ -114,24 +114,6 @@ class DummyDataModule(BaseDataModule):
         train_idx = all_indices[n_test + n_val:]
 
         return SplitIndices(train=train_idx, val=val_idx, test=test_idx)
-
-    def input_shape(self) -> tuple[int, ...]:
-        """Describe one dummy sample before batching.
-
-        Returns:
-            tuple[int, ...]: Dummy bag shape `(instances, feature_dim)`.
-        """
-
-        return (10, 512)
-
-    def label_space(self) -> Dict[str, Any]:
-        """Describe the label space for the dummy task.
-
-        Returns:
-            Dict[str, Any]: Task type and number of classes.
-        """
-
-        return {"task": "binary", "num_classes": 2}
 
     def train_dataloader(self) -> DataLoader:
         """Build the training dataloader.

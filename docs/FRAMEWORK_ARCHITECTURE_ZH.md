@@ -2,77 +2,84 @@
 
 ## 总览
 
-这个仓库是一套基于 Hydra + PyTorch Lightning 的训练框架。它有一个非常明确的架构选择：
+这个仓库是一个基于 Hydra + PyTorch Lightning 的训练框架。它的 runtime 只保留两个一级执行单元：
 
-- Python runtime 只保留两个一级执行单元：`train` 和 `cv`
-- 更复杂的实验流程放到 `src/workflows/` 和 `scripts/` 中组合执行
+- `train`
+- `cv`
 
-这意味着框架不会继续在 `main.py` 里增加新的训练模式，而是把复杂度上收至 workflow 层，把基础运行时保持稳定。
+更复杂的实验流程放在 `src/workflows/` 中编排，不会继续往 runtime 入口里堆新的模式。
+
+这样做的目的很明确：
+
+- runtime surface 保持小而稳定
+- 配置是主要控制面
+- split policy、数据读取、任务逻辑、日志、workflow 编排各自分层
 
 ## 分层设计
 
 ### 1. 入口层
 
-- [`main.py`](/E:/projects/deeplab/main.py)
+- [`main.py`](E:/projects/deeplab/main.py)
 
 职责：
 
 - 组合 Hydra 配置
-- 调用 `validate_app_config()` 标准化框架配置
-- 调用 bootstrap 准备运行目录和基础产物路径
-- 根据 `cfg.mode.name` 分发到 `train` 或 `cv`
+- 校验框架拥有的配置契约
+- 初始化运行目录和输出路径
+- 只分发到 `train` 或 `cv`
 
-这里有意不放训练细节、不放 fold 循环、不放对象实例化逻辑。
+这里不放训练细节、不放 fold 循环、不放对象实例化逻辑。
 
 ### 2. 配置与构建层
 
-- [`src/config/schema.py`](/E:/projects/deeplab/src/config/schema.py)
-- [`src/utils/build.py`](/E:/projects/deeplab/src/utils/build.py)
+- [`src/config/schema.py`](E:/projects/deeplab/src/config/schema.py)
+- [`src/utils/build.py`](E:/projects/deeplab/src/utils/build.py)
 
 职责：
 
-- 把 Hydra 原始配置标准化为框架自己的 contract
-- 校验 `train` / `cv` 这两个内建 mode
-- 把 `_target_ + init_args` 结构转成 Hydra instantiate 能消费的对象配置
-- 构建 split provider、model、datamodule、logger、callbacks、trainer
+- 把 Hydra 配置标准化为框架自己的 contract
+- 校验内建 mode
+- 把 `_target_ + init_args` 转成 instantiate 友好的对象配置
+- 构建 split provider、datamodule、model、callbacks、logger、trainer
 
-框架自己约束的配置接口是：
+框架当前标准化的配置面包括：
 
 - `model._target_ + model.init_args`
 - `datamodule._target_ + datamodule.init_args`
 - `trainer._target_ + trainer.init_args`
 - `logger.items`
 - `callbacks.items`
+- `split.method + split.data_file + split.group_id_column + split.label_column`
 
 ### 3. runtime 层
 
-- [`src/core/train.py`](/E:/projects/deeplab/src/core/train.py)
-- [`src/core/cv.py`](/E:/projects/deeplab/src/core/cv.py)
-- [`src/core/runner.py`](/E:/projects/deeplab/src/core/runner.py)
+- [`src/core/train.py`](E:/projects/deeplab/src/core/train.py)
+- [`src/core/cv.py`](E:/projects/deeplab/src/core/cv.py)
+- [`src/core/runner.py`](E:/projects/deeplab/src/core/runner.py)
 
 职责：
 
-- 生成一次具体运行的 `RunContext`
+- 构造一次具体运行的 `RunContext`
 - 注入 runtime-only 配置
-- resolve 最终执行态配置
-- 调用 Lightning 的 `fit` 和可选 `test`
-- 写 `run_summary.json` 和 `artifacts.json`
+- 解析最终执行态配置
+- 调用 Lightning 的 `fit()` 和可选 `test()`
+- 写出 `run_summary.json` 和 `artifacts.json`
 
-其中 [`src/core/runner.py`](/E:/projects/deeplab/src/core/runner.py) 的 `run_experiment()` 是整个框架最小、最核心的训练执行单元。
+[`src/core/runner.py`](E:/projects/deeplab/src/core/runner.py) 里的 `run_experiment()` 是整个框架最小的运行单元。
 
 ### 4. 扩展层
 
-- [`src/datamodules/`](/E:/projects/deeplab/src/datamodules)
-- [`src/models/`](/E:/projects/deeplab/src/models)
-- [`src/loggers/`](/E:/projects/deeplab/src/loggers)
+- [`src/datamodules/`](E:/projects/deeplab/src/datamodules)
+- [`src/models/`](E:/projects/deeplab/src/models)
+- [`src/loggers/`](E:/projects/deeplab/src/loggers)
 
 职责：
 
 - datamodule：读取数据、消费 split、返回 dataloader
-- model：定义任务语义、损失、指标、优化器配置
-- logger adapter：隔离 MLflow / WandB 之类 backend 的差异
+- model：定义任务语义、损失、指标、优化器
+- logger adapter：隔离 MLflow / WandB 一类后端差异
 
-推荐代码组织方式：
+推荐的代码组织方式：
 
 ```text
 src/models/
@@ -89,92 +96,89 @@ src/datamodules/
 
 ### 5. workflow 层
 
-- [`src/workflows/common.py`](/E:/projects/deeplab/src/workflows/common.py)
-- [`src/workflows/flat_cv.py`](/E:/projects/deeplab/src/workflows/flat_cv.py)
-- [`src/workflows/nested_cv.py`](/E:/projects/deeplab/src/workflows/nested_cv.py)
-- [`src/workflows/hpo_refit.py`](/E:/projects/deeplab/src/workflows/hpo_refit.py)
+- [`src/workflows/common.py`](E:/projects/deeplab/src/workflows/common.py)
+- [`src/workflows/flat_cv.py`](E:/projects/deeplab/src/workflows/flat_cv.py)
+- [`src/workflows/nested_cv.py`](E:/projects/deeplab/src/workflows/nested_cv.py)
+- [`src/workflows/hpo_refit.py`](E:/projects/deeplab/src/workflows/hpo_refit.py)
 
 职责：
 
-- 编排多次 runtime 运行
+- 组织多次 runtime run
 - 通过 subprocess 调用 `main.py`
-- 读取子运行的 summary 和 artifacts
-- 写 workflow 级别的输出
+- 收集子运行的 summary 和 artifacts
+- 写出 workflow 级输出
 
-这里的关键是：workflow 不是新的 runtime mode，而是建立在 `train/cv` 之上的上层调度。
+workflow 是编排层，不是新的 runtime mode。
 
 ## 核心契约
 
 ### RunContext
 
-`RunContext` 定义一次具体运行的上下文：
+[`src/core/contracts.py`](E:/projects/deeplab/src/core/contracts.py) 里的 `RunContext` 描述一次具体运行的上下文：
 
 - mode
 - experiment name
 - run name
 - output directory
-- resolved config path
+- config path
 - summary path
 - artifact index path
-- 可选 fold
+- optional fold
 
 ### RunSummary
 
-`RunSummary` 是单次运行的高频摘要，主要给 train/cv/workflow 消费。
+`RunSummary` 是单次运行的高频结果摘要，主要给 train / cv / workflow 消费：
 
-它包含：
-
-- monitor
+- monitor name
 - `val_score`
 - `last_val_score`
-- 可选 `test_score`
-- `best_ckpt_path`
-
-其中：
-
-- `val_score` 是 best checkpoint 对应的监控分数
-- `last_val_score` 是最后一轮验证值，用于诊断
+- optional `test_score`
+- best checkpoint path
 
 ### ArtifactIndex
 
-`ArtifactIndex` 是完整 artifact 索引，包含：
+`ArtifactIndex` 是单次运行的文件与句柄索引，包含：
 
-- config
+- config paths
 - checkpoints
 - metrics
 - data artifacts
 - figures
-- logger ids
-- workflow children
+- logger identifiers
 
-它的作用不是给人直接阅读，而是给脚本和 workflow 稳定消费。
+workflow 层通过 child artifact path 进行索引，不会把所有子运行内容复制一遍。
 
 ## split 与 datamodule 的边界
 
 这套框架明确把 split policy 从 datamodule 中分离出来：
 
-- split policy 在 [`src/datamodules/split.py`](/E:/projects/deeplab/src/datamodules/split.py)
+- split policy 由 [`src/datamodules/split.py`](E:/projects/deeplab/src/datamodules/split.py) 负责
 - datamodule 只消费 `SplitIndices` 或 `SplitProvider`
-- datamodule 可以有默认 split fallback，但它不是 CV 语义的 owner
+- datamodule 可以保留本地 `_default_split()` 作为 fallback，但它不是 cross-validation 的 owner
 
-这样 datamodule 不需要知道：
+新的 split 语义包括：
 
-- 当前是不是 CV
-- 当前是 outer fold 还是 inner fold
-- workflow 在做什么
+- `stratified_*` 方法从 `split.data_file + split.label_column` 解析标签
+- `stratified_group_*` 方法额外从 `split.data_file + split.group_id_column` 解析 group
+- `stratified_group_*` 不是“松散近似分层”，而是：
+  - group 不泄漏
+  - 每个 split 必须含全部类别
+  - 标签分布尽量接近整体分布
+  - 样本量平衡是次级目标
 
-它只需要知道当前该消费哪组 train/val/test indices。
+如果数据在给定 `n_folds` 或 `test_ratio` 下无法满足这些约束，split 阶段应该直接失败，而不是把问题留到 metrics 阶段。
 
-## 推荐扩展路径
+## 推荐扩展顺序
 
-如果你要把自己的项目接入这套框架，推荐路径是：
+如果你要接入自己的项目，建议按这个顺序：
 
-1. 先整理 manifest
-2. 写 dataset
-3. 写 datamodule
-4. 写 task model
-5. 写 Hydra config
+1. 准备 manifest
+2. 实现 dataset
+3. 实现 datamodule
+4. 实现 task model
+5. 添加 Hydra config
 6. 先验证 `train`
-7. 再扩展到 `cv` 或 workflow
+7. 再扩展到 `cv`
+8. 最后才考虑 workflow
 
-这个顺序能最大限度降低调试复杂度，因为你始终是在验证最小执行单元，而不是一开始就进入复杂编排。
+这个顺序的核心价值是：先把最小执行单元做稳，再做编排。

@@ -9,9 +9,8 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 from src.datamodules.base_dm import BaseDataModule
-from src.datamodules.datasets.tabular_dataset import TabularDataset
-from src.datamodules.manifests.schema import ManifestColumns
-from src.datamodules.split import SplitIndices
+from src.datamodules.datasets.tabular_ds import TabularDataset
+from src.datamodules.split import SplitIndices, SplitProvider
 
 
 class TabularClassificationDataModule(BaseDataModule):
@@ -24,7 +23,7 @@ class TabularClassificationDataModule(BaseDataModule):
     def __init__(
         self,
         data_cfg: Dict[str, Any],
-        split_indices: Optional[SplitIndices] = None,
+        split_provider: Optional[SplitProvider] = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -32,7 +31,7 @@ class TabularClassificationDataModule(BaseDataModule):
 
         Args:
             data_cfg: Datamodule configuration including manifest and feature columns.
-            split_indices: Optional externally supplied split indices.
+            split_provider: Optional split provider supplied by the runtime.
             *args: Extra positional arguments kept for compatibility.
             **kwargs: Extra keyword arguments kept for compatibility.
 
@@ -40,7 +39,7 @@ class TabularClassificationDataModule(BaseDataModule):
             None: The constructor initializes in-memory dataset holders.
         """
 
-        super().__init__(data_cfg=data_cfg, split_indices=split_indices, *args, **kwargs)
+        super().__init__(data_cfg=data_cfg, split_provider=split_provider, *args, **kwargs)
         self.rows: List[Dict[str, Any]] = []
         self.train_dataset: Optional[TabularDataset] = None
         self.val_dataset: Optional[TabularDataset] = None
@@ -98,7 +97,7 @@ class TabularClassificationDataModule(BaseDataModule):
         self.emit_data_artifacts()
 
     def _default_split(self) -> SplitIndices:
-        """Create a simple fallback split from manifest order and ratios.
+        """Create a simple fallback split from manifest order.
 
         Returns:
             SplitIndices: Default split built from the loaded manifest rows.
@@ -111,8 +110,8 @@ class TabularClassificationDataModule(BaseDataModule):
         if total_samples == 0:
             raise ValueError("Tabular dataset is empty")
 
-        val_ratio = float(self.hparams.data_cfg.get("val_ratio", 0.2))
-        test_ratio = float(self.hparams.data_cfg.get("test_ratio", 0.1))
+        val_ratio = 0.2
+        test_ratio = 0.1
         indices = np.arange(total_samples, dtype=int)
         n_test = int(round(total_samples * test_ratio))
         n_val = int(round(total_samples * val_ratio))
@@ -121,51 +120,6 @@ class TabularClassificationDataModule(BaseDataModule):
         val_idx = indices[n_test:n_test + n_val]
         train_idx = indices[n_test + n_val:]
         return SplitIndices(train=train_idx, val=val_idx, test=test_idx)
-
-    def input_shape(self) -> tuple[int, ...]:
-        """Describe the feature shape of one tabular sample.
-
-        Returns:
-            tuple[int, ...]: Number of tabular features per sample.
-        """
-
-        feature_columns = self.hparams.data_cfg.get("feature_columns", [])
-        return (len(feature_columns),)
-
-    def label_space(self) -> Dict[str, Any]:
-        """Describe the label space inferred from loaded manifest rows.
-
-        Returns:
-            Dict[str, Any]: Task type and inferred number of classes.
-        """
-
-        labels = (
-            {int(row[self.hparams.data_cfg.label_column]) for row in self.rows}
-            if self.rows
-            else set()
-        )
-        return {"task": "multiclass", "num_classes": max(len(labels), 1)}
-
-    def dataset_summary(self) -> Dict[str, Any]:
-        """Extend the base dataset summary with manifest-specific metadata.
-
-        Returns:
-            Dict[str, Any]: Serializable dataset metadata for artifact indexing.
-        """
-
-        summary = super().dataset_summary()
-        manifest_columns = ManifestColumns(
-            sample_id=str(self.hparams.data_cfg.get("sample_id_column", "sample_id")),
-            label=str(self.hparams.data_cfg.get("label_column", "label")),
-            group=self.hparams.data_cfg.get("group_column"),
-            path=self.hparams.data_cfg.get("path_column"),
-        )
-        summary["feature_columns"] = list(self.hparams.data_cfg.get("feature_columns", []))
-        summary["label_column"] = str(self.hparams.data_cfg.get("label_column", "label"))
-        summary["group_column"] = self.hparams.data_cfg.get("group_column")
-        summary["manifest_columns"] = manifest_columns.to_dict()
-        summary["num_samples"] = len(self.rows)
-        return summary
 
     def train_dataloader(self) -> DataLoader:
         """Build the training dataloader for tabular data.

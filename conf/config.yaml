@@ -4,8 +4,8 @@ defaults:
   - artifacts: default
   - split: default
   - workflow: default
-  - datamodule: cpath/dummy
-  - model: cpath/dummy
+  - datamodule: tabular/tabular
+  - model: tabular/tabular
   - callbacks: default
   - logger: mlflow
   - trainer: default

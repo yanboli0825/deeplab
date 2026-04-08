@@ -157,6 +157,23 @@ The framework keeps split policy outside datamodules.
 - datamodules consume `SplitIndices` or a `SplitProvider`
 - datamodules may still define a local fallback split, but they are not the owner of cross-validation semantics
 
+The current split surface includes:
+
+- non-stratified holdout and k-fold variants
+- group-aware holdout and k-fold variants
+- stratified holdout and k-fold variants
+- stratified group-aware holdout and k-fold variants
+
+For stratified methods, the framework resolves labels from `split.data_file + split.label_column`.
+For stratified group-aware methods, it also resolves group ids from `split.data_file + split.group_id_column`.
+
+`stratified_group_*` methods treat the following as hard constraints:
+
+- group non-leakage
+- every split must contain all classes
+
+Label distribution closeness is the main optimization target, and bin-size balance is secondary.
+
 This separation allows the same datamodule to be reused in:
 
 - one train run

@@ -1,4 +1,4 @@
-_target_: src.models.dummy_model.DummyModel
+_target_: src.models.cpath.dummy_model.DummyModel
 _recursive_: false
 
 init_args:

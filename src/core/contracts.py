@@ -61,6 +61,7 @@ class RunSummary:
     last_val_score: Optional[float]
     test_score: Optional[float]
     best_ckpt_path: Optional[str]
+    best_metrics: Dict[str, Any] = field(default_factory=dict)
     fold: Optional[int] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 

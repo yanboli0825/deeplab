@@ -3,7 +3,7 @@ from typing import Any, Dict
 import torch
 import torch.nn as nn
 
-from .base_model import BaseModel
+from src.models.base_model import BaseModel
 
 
 class DummyModel(BaseModel):
@@ -24,7 +24,7 @@ class DummyModel(BaseModel):
         # Declare the module attribute before `save_hyperparameters()` runs in BaseModel.
         self.classifier = None
         super().__init__(model_cfg, *args, **kwargs)
-        self.classifier = nn.Linear(512, int(model_cfg.get("num_classes", 2)))
+        self.classifier = nn.Linear(768, int(model_cfg.get("num_classes", 2)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Pool a bag of embeddings and classify the pooled feature.

@@ -28,14 +28,13 @@ def _make_test_cfg(tmp_path):
                 "test_after_train": True,
                 "resume_ckpt": None,
                 "mode": {"name": "train"},
-                "paths": {"output_dir": str(tmp_path), "data_dir": "data"},
+                "paths": {"output_dir": str(tmp_path)},
                 "artifacts": {
                     "summary_name": "run_summary.json",
                     "index_name": "artifacts.json",
                     "workflow_summary_name": "workflow_summary.json",
                     "workflow_index_name": "workflow_artifacts.json",
                     "split_manifest_name": "split_manifest.yaml",
-                    "dataset_summary_name": "dataset_summary.json",
                 },
                 "split": {"method": None},
                 "workflow": {"root_dir": str(tmp_path / "workflows")},
@@ -59,7 +58,7 @@ def _make_test_cfg(tmp_path):
                             "dataset_name": "dummy_dataset",
                             "batch_size": 8,
                             "num_workers": 0,
-                            "total_samples": 48,
+                            "num_samples": 48,
                         }
                     },
                 },
@@ -130,6 +129,11 @@ def test_run_experiment_writes_run_summary_and_artifact_index(tmp_path) -> None:
     assert payload["mode"] == "train"
     assert payload["run_name"] == "smoke"
     assert "val_score" in payload
+    assert payload["best_metrics"]["monitor"] == "val/loss"
+    assert "epoch" in payload["best_metrics"]
+    assert "val" in payload["best_metrics"]
+    assert "loss" in payload["best_metrics"]["val"]
+    assert "test" in payload["best_metrics"]
     assert payload["artifact_index_path"].endswith("artifacts.json")
     assert artifact_payload["metrics"]["summary_path"].endswith("run_summary.json")
 

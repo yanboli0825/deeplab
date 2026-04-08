@@ -6,7 +6,7 @@ from typing import Dict, Optional
 
 @dataclass(frozen=True)
 class ManifestColumns:
-    """Recommended column names for dataset manifests."""
+    """Recommended column names for dataset tabular."""
 
     sample_id: str = "sample_id"
     label: str = "label"

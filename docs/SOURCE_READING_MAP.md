@@ -2,184 +2,106 @@
 
 ## Summary
 
-这份文档是给第一次读源码的人用的。它不回答“代码怎么跑起来”，而是回答：
+This document is for people reading the codebase for the first time.
+It does not try to explain everything. It answers:
 
-- 每个文件在架构里的位置是什么
-- 读这个文件时应先抓什么，再抓什么
-- 哪些函数和变量最值得盯住
+- which file owns which responsibility
+- what to read first
+- what to look for in each file
 
-如果你还没建立整体调用链，先看 [`docs/CALL_FLOW.md`](/E:/projects/deeplab/docs/CALL_FLOW.md)。
+If you have not built the call chain yet, start with [`docs/CALL_FLOW.md`](E:/projects/deeplab/docs/CALL_FLOW.md).
 
-## 1. 第一轮：先读主链
+## 1. Read the main chain first
 
-目标：先建立一次 `train` 运行是怎么串起来的。
+Recommended order:
 
-建议顺序：
+1. [`main.py`](E:/projects/deeplab/main.py)
+2. [`src/config/schema.py`](E:/projects/deeplab/src/config/schema.py)
+3. [`src/core/bootstrap.py`](E:/projects/deeplab/src/core/bootstrap.py)
+4. [`src/core/train.py`](E:/projects/deeplab/src/core/train.py)
+5. [`src/core/runner.py`](E:/projects/deeplab/src/core/runner.py)
+6. [`src/utils/build.py`](E:/projects/deeplab/src/utils/build.py)
 
-1. [`main.py`](/E:/projects/deeplab/main.py)
-2. [`src/config/schema.py`](/E:/projects/deeplab/src/config/schema.py)
-3. [`src/core/bootstrap.py`](/E:/projects/deeplab/src/core/bootstrap.py)
-4. [`src/core/train.py`](/E:/projects/deeplab/src/core/train.py)
-5. [`src/core/runner.py`](/E:/projects/deeplab/src/core/runner.py)
-6. [`src/utils/build.py`](/E:/projects/deeplab/src/utils/build.py)
+What you should understand after this pass:
 
-### 读完这一轮后，你应该建立的认知
+- `main.py` is only the entrypoint
+- `run_experiment()` is the smallest runtime unit
+- `build.py` owns instantiate boundaries
+- runtime consumes standardized Hydra config, not raw YAML structure
 
-- `main.py` 只是入口，不做训练细节
-- `run_experiment()` 是最小训练执行单元
-- `build.py` 负责 instantiate 边界
-- runtime 消费的是标准化后的 Hydra config
+## 2. Read datamodule and model contracts next
 
-## 2. 第二轮：再读对象层
+Recommended order:
 
-目标：理解 datamodule 和 model 是如何被 runtime 使用的。
+1. [`src/datamodules/base_dm.py`](E:/projects/deeplab/src/datamodules/base_dm.py)
+2. [`src/datamodules/tabular_dm.py`](E:/projects/deeplab/src/datamodules/tabular_dm.py)
+3. [`src/datamodules/datasets/tabular_dataset.py`](E:/projects/deeplab/src/datamodules/datasets/tabular_dataset.py)
+4. [`src/models/base_model.py`](E:/projects/deeplab/src/models/base_model.py)
+5. [`src/models/tasks/tabular_classification.py`](E:/projects/deeplab/src/models/tasks/tabular_classification.py)
+6. [`src/models/backbones/tabular_mlp.py`](E:/projects/deeplab/src/models/backbones/tabular_mlp.py)
+7. [`src/models/heads/classification_head.py`](E:/projects/deeplab/src/models/heads/classification_head.py)
 
-建议顺序：
+What to pay attention to:
 
-1. [`src/datamodules/base_dm.py`](/E:/projects/deeplab/src/datamodules/base_dm.py)
-2. [`src/datamodules/tabular_dm.py`](/E:/projects/deeplab/src/datamodules/tabular_dm.py)
-3. [`src/datamodules/datasets/tabular_dataset.py`](/E:/projects/deeplab/src/datamodules/datasets/tabular_dataset.py)
-4. [`src/models/base_model.py`](/E:/projects/deeplab/src/models/base_model.py)
-5. [`src/models/tasks/tabular_classification.py`](/E:/projects/deeplab/src/models/tasks/tabular_classification.py)
-6. [`src/models/backbones/tabular_mlp.py`](/E:/projects/deeplab/src/models/backbones/tabular_mlp.py)
-7. [`src/models/heads/classification_head.py`](/E:/projects/deeplab/src/models/heads/classification_head.py)
+- datamodules consume split results and build dataloaders
+- task models own forward/loss/metrics/optimizer behavior
+- the framework no longer forces datamodules to expose summary metadata such as `input_shape` or `label_space`
 
-### [`src/datamodules/base_dm.py`](/E:/projects/deeplab/src/datamodules/base_dm.py)
+## 3. Read workflow code last
 
-先看：
+Recommended order:
 
-- 构造函数参数
-- `resolve_split()`
-- `emit_data_artifacts()`
-- `dataset_summary()`
+1. [`src/core/contracts.py`](E:/projects/deeplab/src/core/contracts.py)
+2. [`src/core/cv.py`](E:/projects/deeplab/src/core/cv.py)
+3. [`src/workflows/common.py`](E:/projects/deeplab/src/workflows/common.py)
+4. [`src/workflows/flat_cv.py`](E:/projects/deeplab/src/workflows/flat_cv.py)
+5. [`src/workflows/nested_cv.py`](E:/projects/deeplab/src/workflows/nested_cv.py)
+6. [`src/workflows/hpo_refit.py`](E:/projects/deeplab/src/workflows/hpo_refit.py)
 
-要抓住的点：
+What to understand here:
 
-- datamodule 消费 split，而不是拥有 split policy
-- runtime 会把 artifact 输出配置注入到 `data_cfg.runtime`
+- `cv` is repeated `run_experiment()` plus aggregation
+- workflows orchestrate multiple runtime runs through subprocesses
+- workflow code reads child artifacts instead of reimplementing runtime logic
 
-### [`src/datamodules/tabular_dm.py`](/E:/projects/deeplab/src/datamodules/tabular_dm.py)
+## 4. Read split code with the new semantics in mind
 
-先看：
+Relevant files:
 
-- `prepare_data()`
-- `setup()`
-- `_default_split()`
-- `train_dataloader() / val_dataloader() / test_dataloader()`
+- [`src/datamodules/split.py`](E:/projects/deeplab/src/datamodules/split.py)
+- [`src/utils/build.py`](E:/projects/deeplab/src/utils/build.py)
 
-要抓住的点：
+Important ideas:
 
-- manifest 如何被读入
-- split 如何被解析成 train/val/test rows
-- dataset summary 如何扩展
+- split policy is owned outside the datamodule
+- `stratified_*` methods resolve `label_column` from `split.data_file`
+- `stratified_group_*` methods resolve both `label_column` and `group_id_column`
+- `stratified_group_*` must fail early if a requested split cannot keep all classes present in every split
 
-### [`src/models/base_model.py`](/E:/projects/deeplab/src/models/base_model.py)
+## 5. Use config as the map back to code
 
-先看：
+When you see a field in config, trace it back as follows:
 
-- `__init__`
-- `training_step()`
-- `validation_step()`
-- `test_step()`
-- `configure_optimizers()`
+- `_target_` tells you which Python class is instantiated
+- `init_args` tells you which constructor arguments matter
+- runtime values such as `fold` are injected by the framework, not directly by raw YAML
 
-要抓住的点：
+Useful config files:
 
-- 通用训练语义放在 base class
-- task model 只需要补网络语义
-- optimizer / scheduler 仍然由 config 驱动
+1. [`conf/config.yaml`](E:/projects/deeplab/conf/config.yaml)
+2. [`conf/model/cpath/tabular_classification.yaml`](E:/projects/deeplab/conf/model/cpath/tabular_classification.yaml)
+3. [`conf/datamodule/cpath/tabular_manifest.yaml`](E:/projects/deeplab/conf/datamodule/cpath/tabular_manifest.yaml)
+4. [`conf/trainer/default.yaml`](E:/projects/deeplab/conf/trainer/default.yaml)
+5. [`conf/callbacks/default.yaml`](E:/projects/deeplab/conf/callbacks/default.yaml)
+6. [`conf/logger/mlflow.yaml`](E:/projects/deeplab/conf/logger/mlflow.yaml)
 
-### [`src/models/tasks/tabular_classification.py`](/E:/projects/deeplab/src/models/tasks/tabular_classification.py)
+## 6. Practical reading strategy
 
-先看：
+If you only have a short time:
 
-- `__init__`
-- `forward()`
+1. read `main.py` and `runner.py`
+2. read `build.py`
+3. read one datamodule and one task model
+4. then read `cv.py` and workflow code if needed
 
-要抓住的点：
-
-- task model 如何组合 backbone 和 head
-- task model 为什么不关心 split、output dir、workflow
-
-## 3. 第三轮：最后读聚合与 workflow
-
-目标：理解 `cv` 和 workflow 如何在不破坏最小执行单元边界的前提下完成复杂实验。
-
-建议顺序：
-
-1. [`src/core/contracts.py`](/E:/projects/deeplab/src/core/contracts.py)
-2. [`src/core/cv.py`](/E:/projects/deeplab/src/core/cv.py)
-3. [`src/workflows/common.py`](/E:/projects/deeplab/src/workflows/common.py)
-4. [`src/workflows/flat_cv.py`](/E:/projects/deeplab/src/workflows/flat_cv.py)
-5. [`src/workflows/nested_cv.py`](/E:/projects/deeplab/src/workflows/nested_cv.py)
-6. [`src/workflows/hpo_refit.py`](/E:/projects/deeplab/src/workflows/hpo_refit.py)
-
-### [`src/core/contracts.py`](/E:/projects/deeplab/src/core/contracts.py)
-
-先看：
-
-- `RunContext`
-- `RunSummary`
-- `ArtifactIndex`
-- `CvSummary`
-- `WorkflowSummary`
-
-要抓住的点：
-
-- 单次 run 和聚合层的 contract 如何区分
-- 为什么聚合层通过 child artifact path 做索引，而不是猜目录
-
-### [`src/core/cv.py`](/E:/projects/deeplab/src/core/cv.py)
-
-先看：
-
-- fold loop
-- `scores` / `test_scores`
-- `CvSummary`
-
-要抓住的点：
-
-- `cv` 本质上仍然是多次 `run_experiment()`
-- 它新增的是聚合语义，而不是一套新的训练内核
-
-### [`src/workflows/common.py`](/E:/projects/deeplab/src/workflows/common.py)
-
-先看：
-
-- `run_main()`
-- `latest_json()`
-- `latest_path()`
-- `write_workflow_outputs()`
-
-要抓住的点：
-
-- workflow 为什么通过 subprocess 调 `main.py`
-- workflow 如何消费 child run outputs
-
-## 4. 配置文件如何配合阅读
-
-源码阅读时，建议同时打开这些配置：
-
-1. [`conf/config.yaml`](/E:/projects/deeplab/conf/config.yaml)
-2. [`conf/model/cpath/tabular_classification.yaml`](/E:/projects/deeplab/conf/model/cpath/tabular_classification.yaml)
-3. [`conf/datamodule/cpath/tabular_manifest.yaml`](/E:/projects/deeplab/conf/datamodule/cpath/tabular_manifest.yaml)
-4. [`conf/trainer/default.yaml`](/E:/projects/deeplab/conf/trainer/default.yaml)
-5. [`conf/callbacks/default.yaml`](/E:/projects/deeplab/conf/callbacks/default.yaml)
-6. [`conf/logger/mlflow.yaml`](/E:/projects/deeplab/conf/logger/mlflow.yaml)
-
-对照方法：
-
-- 看到一个 Python 构造函数，就回头看它对应的 `_target_`
-- 看到一个对象字段，就回头看它来自哪个 `init_args`
-- 看到一个 runtime 行为，就回头看是否由 config 控制
-
-## 5. 最实用的阅读策略
-
-如果你只想最短时间读懂：
-
-1. 先读 [`main.py`](/E:/projects/deeplab/main.py) 和 [`src/core/runner.py`](/E:/projects/deeplab/src/core/runner.py)
-2. 再读 [`src/utils/build.py`](/E:/projects/deeplab/src/utils/build.py)
-3. 然后选一个 datamodule 和一个 task model 读通
-4. 最后再看 `cv` 和 workflow
-
-这样先掌握的是主干，而不是枝节。
+This order keeps you focused on the main path before branching into orchestration.

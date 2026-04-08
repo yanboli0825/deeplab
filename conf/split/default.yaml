@@ -1,10 +1,8 @@
-method: null
-num_samples: null
-n_splits: 5
-val_ratio: 0.2
-test_ratio: 0.2
+method: null  # optional: holdout, stratified_holdout, group_holdout, stratified_group_holdout, kfold, stratified_kfold, group_kfold, stratified_group_kfold, train_val_test_holdout, stratified_train_val_test_holdout, group_train_val_test_holdout, stratified_group_train_val_test_holdout, dev_test_kfold, stratified_dev_test_kfold, group_dev_test_kfold, stratified_group_dev_test_kfold
+data_file: ${datamodule.init_args.data_cfg.data_file}
+group_id_column: null
+label_column: null
+n_folds: ${mode.n_folds}
+val_ratio: 0.1
+test_ratio: 0.1
 seed: ${seed}
-fold: null
-candidate_indices: null
-group_ids: null
-manifest_path: null

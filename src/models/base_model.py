@@ -36,15 +36,16 @@ class BaseModel(L.LightningModule, ABC):
 
         super().__init__()
         self.model_cfg = model_cfg
-        self.num_classes = model_cfg.get("num_classes", 2)
+        self.num_classes: int = model_cfg.get("num_classes", 2)
         self.metrics_cfg = metrics_cfg or self._default_metrics()
 
         self._setup_metrics()
         self.save_hyperparameters()
 
         self.monitor = "val/loss"
-        self.best_metric = float("inf") if self.monitor.startswith("loss") else float("-inf")
+        self.best_monitor_value = float("inf") if self.monitor.startswith("loss") else float("-inf")
         self.best_epoch = -1
+        self.best_metrics: Dict[str, Any] = {}
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -101,7 +102,7 @@ class BaseModel(L.LightningModule, ABC):
 
         if self.trainer and self.trainer.checkpoint_callback:
             self.monitor = self.trainer.checkpoint_callback.monitor or self.monitor
-            self.best_metric = float("inf") if "loss" in self.monitor.lower() else float("-inf")
+            self.best_monitor_value = float("inf") if "loss" in self.monitor.lower() else float("-inf")
 
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         """Run one training step.
@@ -118,7 +119,7 @@ class BaseModel(L.LightningModule, ABC):
         logits = self(x)
         loss = torch.nn.functional.cross_entropy(logits, y)
 
-        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train/loss", loss, on_step=False, on_epoch=True, prog_bar=True)
         self.train_metrics.update(logits, y)
         return loss
 
@@ -161,7 +162,8 @@ class BaseModel(L.LightningModule, ABC):
 
         output = self.val_metrics.compute()
         self.log_dict(output, on_step=False, on_epoch=True, prog_bar=True)
-        self.val_metrics.reset()
+
+        val_snapshot = self._collect_stage_metrics(stage="val", metrics_output=output)
 
         current_metric = output.get(self.monitor, None)
         if current_metric is None:
@@ -170,18 +172,23 @@ class BaseModel(L.LightningModule, ABC):
         if current_metric is not None:
             current_value = current_metric.item() if hasattr(current_metric, "item") else current_metric
             is_better = (
-                current_value < self.best_metric
+                current_value < self.best_monitor_value
                 if "loss" in self.monitor.lower()
-                else current_value > self.best_metric
+                else current_value > self.best_monitor_value
             )
             if is_better:
-                self.best_metric = current_value
+                self.best_monitor_value = current_value
                 self.best_epoch = self.current_epoch
+                self.best_metrics = {
+                    "epoch": int(self.current_epoch),
+                    "monitor": self.monitor,
+                    "monitor_value": float(current_value),
+                    "val": val_snapshot,
+                }
                 self._log_confusion_matrix(self.val_cm.compute().cpu().numpy(), epoch=self.current_epoch, stage="val")
-                self.log("best_metric", self.best_metric, on_step=False, on_epoch=True)
-                self.log("best_epoch", self.best_epoch, on_step=False, on_epoch=True)
 
         self.val_cm.reset()
+        self.val_metrics.reset()
 
     def test_step(self, batch: Any, batch_idx: int) -> None:
         """Run one test step.
@@ -211,9 +218,41 @@ class BaseModel(L.LightningModule, ABC):
 
         output = self.test_metrics.compute()
         self.log_dict(output, on_step=False, on_epoch=True, prog_bar=True)
+        test_snapshot = self._collect_stage_metrics(stage="test", metrics_output=output)
+        if self.best_metrics:
+            self.best_metrics["test"] = test_snapshot
         self.test_metrics.reset()
         self._log_confusion_matrix(self.test_cm.compute().cpu().numpy(), epoch=self.current_epoch, stage="test")
         self.test_cm.reset()
+
+    def _collect_stage_metrics(self, stage: str, metrics_output: Dict[str, Any]) -> Dict[str, float]:
+        """Normalize one stage's metrics into a stable, serializable payload."""
+
+        snapshot: Dict[str, float] = {}
+        stage_prefix = f"{stage}/"
+        stage_loss = self.trainer.callback_metrics.get(f"{stage}/loss")
+        if stage_loss is not None:
+            snapshot["loss"] = self._metric_to_float(stage_loss)
+
+        for raw_key, raw_value in metrics_output.items():
+            key = str(raw_key)
+            if not key.startswith(stage_prefix):
+                continue
+            normalized = self._normalize_metric_key(key[len(stage_prefix):])
+            snapshot[normalized] = self._metric_to_float(raw_value)
+        return snapshot
+
+    def _metric_to_float(self, value: Any) -> float:
+        """Convert logged metric values to plain Python floats."""
+
+        if hasattr(value, "item"):
+            return float(value.item())
+        return float(value)
+
+    def _normalize_metric_key(self, name: str) -> str:
+        """Convert TorchMetrics-style names to stable summary keys."""
+
+        return str(name).strip().lower()
 
     def _log_confusion_matrix(self, cm: Any, epoch: int, stage: str = "val") -> None:
         """Save and log a confusion matrix figure.

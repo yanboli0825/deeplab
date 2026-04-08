@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - override /model: tabular/tabular
+  - override /datamodule: cpath/tabular
+  - override /logger: mlflow
+  - override /trainer: default
+
+experiment_name: dummy_tabular
+run_name: dummy
+monitor: val/loss
+test_after_train: true

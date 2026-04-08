@@ -4,4 +4,3 @@ index_name: artifacts.json
 workflow_summary_name: workflow_summary.json
 workflow_index_name: workflow_artifacts.json
 split_manifest_name: split_manifest.yaml
-dataset_summary_name: dataset_summary.json
