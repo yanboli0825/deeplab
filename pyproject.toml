@@ -38,6 +38,10 @@ wandb = [
 mlflow-system = [
     "psutil",
 ]
+service = [
+    "fastapi",
+    "uvicorn[standard]",
+]
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,9 @@
+_target_: src.datamodules.frozen_section_dm.FrozenSectionMetaDataModule
+_recursive_: false
+
+init_args:
+  data_cfg:
+    dataset_name: frozen_section_video_v1
+    data_file: data/frozen_section/manifest.csv
+    batch_size: 1
+    num_workers: 0

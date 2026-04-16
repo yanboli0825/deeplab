@@ -1,0 +1,22 @@
+_target_: src.models.cpath.ours.MOHPMIL_v1
+_recursive_: false
+
+init_args:
+  model_cfg:
+    model_name: MOHPMIL_v1
+    dim_in: 768
+    dim_hidden: 1024
+    meta_dim: 3
+    num_classes: 2
+    num_mag: 5
+    topk_ratio: 0.2
+    num_order_buckets: 8
+    num_heads: 8
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 1e-4
+    weight_decay: 1e-4
+  scheduler:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: ${trainer.init_args.max_epochs}
+    eta_min: 1e-6

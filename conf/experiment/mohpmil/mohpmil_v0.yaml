@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - override /model: cpath/mohpmil
+  - override /datamodule: cpath/frozen_section_mohpmil
+  - override /logger: mlflow
+  - override /trainer: default
+  - override /split: baseline
+  - override /mode: cv
+
+experiment_name: mohpmil
+run_name: ctranspath_mohpmil_v0
+monitor: val/loss
+test_after_train: true
