@@ -1,0 +1,21 @@
+_target_: src.models.cpath.clam.CLAM_SB
+_recursive_: false
+
+init_args:
+  model_cfg:
+    model_name: clam-sb
+    gate: true
+    size_arg: "small"
+    dropout: 0.0
+    k_sample: 4
+    n_classes: 2
+    subtyping: False
+    embed_dim: 2048
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 1e-4
+    weight_decay: 1e-4
+  scheduler:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: ${trainer.init_args.max_epochs}
+    eta_min: 1e-6

@@ -1,0 +1,9 @@
+_target_: src.datamodules.frozen_section_dm.FrozenSectionDataModule_Resnet50 # must
+_recursive_: false # must
+
+init_args: #must
+  data_cfg: # must
+    dataset_name: frozen_section_video_v1 # must
+    data_file: data/frozen_section/manifest.csv # must
+    batch_size: 1  # must
+    num_workers: 0  # must

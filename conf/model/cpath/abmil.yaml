@@ -1,0 +1,16 @@
+_target_: src.models.cpath.abmil.ABMIL
+_recursive_: false
+
+init_args:
+  model_cfg:
+    model_name: abmil
+    M: 2048
+    num_classes: 2
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 1e-4
+    weight_decay: 1e-4
+  scheduler:
+    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+    T_max: ${trainer.init_args.max_epochs}
+    eta_min: 1e-6

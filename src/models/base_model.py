@@ -36,7 +36,7 @@ class BaseModel(L.LightningModule, ABC):
 
         super().__init__()
         self.model_cfg = model_cfg
-        self.num_classes: int = model_cfg.get("num_classes", 2)
+        self.num_classes: int = model_cfg.get("num_classes", model_cfg.get("n_classes", 2))
         self.metrics_cfg = metrics_cfg or self._default_metrics()
 
         self._setup_metrics()
@@ -68,9 +68,9 @@ class BaseModel(L.LightningModule, ABC):
 
         return {
             "Accuracy": {"task": "multiclass", "num_classes": self.num_classes},
-            "Precision": {"task": "multiclass", "num_classes": self.num_classes},
-            "Recall": {"task": "multiclass", "num_classes": self.num_classes},
-            "F1Score": {"task": "multiclass", "num_classes": self.num_classes},
+            "Precision": {"task": "multiclass", "num_classes": self.num_classes, "average": "macro"},
+            "Recall": {"task": "multiclass", "num_classes": self.num_classes, "average": "macro"},
+            "F1Score": {"task": "multiclass", "num_classes": self.num_classes, "average": "macro"},
             "AUROC": {"task": "multiclass", "num_classes": self.num_classes},
         }
 

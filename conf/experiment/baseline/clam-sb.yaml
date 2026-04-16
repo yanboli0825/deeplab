@@ -1,0 +1,14 @@
+# @package _global_
+
+defaults:
+  - override /model: cpath/clam-sb
+  - override /datamodule: cpath/frozen_section_resnet50
+  - override /logger: mlflow
+  - override /trainer: default
+  - override /split: baseline
+  - override /mode: cv
+
+experiment_name: baseline
+run_name: resnet50_clam-sb
+monitor: val/loss
+test_after_train: true
